@@ -1,33 +1,47 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { signInWithGoogle, signInWithEmail, signUpWithEmail } from '@/lib/firebase';
+import { signInWithGoogle, signInWithEmail, signUpWithEmail, handleGoogleRedirect } from '@/lib/firebase';
 import { Chrome } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Login() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    handleGoogleRedirect().then((redirectUser) => {
+      if (redirectUser) {
+        setLocation('/');
+      }
+    });
+  }, [setLocation]);
+
+  useEffect(() => {
+    if (user) {
+      setLocation('/');
+    }
+  }, [user, setLocation]);
+
   const handleGoogleSignIn = async () => {
     setLoading(true);
     try {
       await signInWithGoogle();
-      setLocation('/');
     } catch (error: any) {
       toast({
         title: 'Sign in failed',
         description: error.message,
         variant: 'destructive',
       });
-    } finally {
       setLoading(false);
     }
   };
