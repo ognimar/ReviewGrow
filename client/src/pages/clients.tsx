@@ -5,14 +5,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Upload, Plus, Search, FileDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
-export default function Contacts() {
+export default function Clients() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-display font-bold tracking-tight">Contacts</h1>
-            <p className="text-muted-foreground">Manage your audience list and import CSV data for campaigns.</p>
+            <h1 className="text-3xl font-display font-bold tracking-tight">Clients</h1>
+            <p className="text-muted-foreground">Manage your client list and import CSV data for campaigns.</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline">
@@ -28,12 +28,12 @@ export default function Contacts() {
           <CardHeader>
              <div className="flex items-center justify-between">
                 <div>
-                    <CardTitle>Contact List</CardTitle>
-                    <CardDescription>Manage your recipients.</CardDescription>
+                    <CardTitle>Client List</CardTitle>
+                    <CardDescription>Manage your clients for campaigns.</CardDescription>
                 </div>
                 <div className="relative w-64">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search contacts..." className="pl-8" />
+                    <Input placeholder="Search clients..." className="pl-8" />
                 </div>
              </div>
           </CardHeader>
