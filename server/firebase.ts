@@ -7,21 +7,28 @@ export function initializeFirebase() {
     return firebaseApp;
   }
 
-  const serviceAccount = process.env.OMNISEND_FIREBASE_SERVICE_ACCOUNT 
-    ? JSON.parse(process.env.OMNISEND_FIREBASE_SERVICE_ACCOUNT)
-    : undefined;
-
-  if (!serviceAccount) {
+  const serviceAccountStr = process.env.OMNISEND_FIREBASE_SERVICE_ACCOUNT;
+  
+  if (!serviceAccountStr) {
     console.warn('Firebase service account not configured. Running in mock mode.');
     return null;
   }
 
-  firebaseApp = admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    storageBucket: process.env.OMNISEND_FIREBASE_STORAGE_BUCKET,
-  });
-
-  return firebaseApp;
+  try {
+    const serviceAccount = JSON.parse(serviceAccountStr);
+    console.log('Firebase service account loaded for project:', serviceAccount.project_id);
+    
+    firebaseApp = admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      storageBucket: process.env.OMNISEND_FIREBASE_STORAGE_BUCKET,
+    });
+    
+    console.log('Firebase Admin SDK initialized successfully');
+    return firebaseApp;
+  } catch (error) {
+    console.error('Failed to initialize Firebase:', error);
+    return null;
+  }
 }
 
 export function getFirestore() {
