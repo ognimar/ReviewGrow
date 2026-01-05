@@ -35,8 +35,13 @@ export async function fetchCurrentUser() {
 export async function fetchClients() {
   const headers = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/clients`, { headers });
-  if (!response.ok) throw new Error('Failed to fetch clients');
-  return response.json();
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || 'Failed to fetch clients');
+  }
+  const data = await response.json();
+  if (data.error) throw new Error(data.error);
+  return Array.isArray(data) ? data : data.clients || [];
 }
 
 export async function importClientsCSV(file: File) {
@@ -62,8 +67,13 @@ export async function importClientsCSV(file: File) {
 export async function fetchCampaigns() {
   const headers = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/campaigns`, { headers });
-  if (!response.ok) throw new Error('Failed to fetch campaigns');
-  return response.json();
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || 'Failed to fetch campaigns');
+  }
+  const data = await response.json();
+  if (data.error) throw new Error(data.error);
+  return Array.isArray(data) ? data : data.campaigns || [];
 }
 
 export async function createCampaign(data: any) {
@@ -91,13 +101,63 @@ export async function createCheckoutSession(plan: 'monthly' | 'yearly') {
     headers,
     body: JSON.stringify({ plan }),
   });
-  if (!response.ok) throw new Error('Failed to create checkout session');
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || 'Failed to create checkout session');
+  }
   return response.json();
 }
 
 export async function fetchAdminUsers() {
   const headers = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/admin/users`, { headers });
-  if (!response.ok) throw new Error('Failed to fetch users');
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || 'Failed to fetch users');
+  }
+  const data = await response.json();
+  if (data.error) throw new Error(data.error);
+  return Array.isArray(data) ? data : data.users || [];
+}
+
+export async function fetchTemplates() {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/templates`, { headers });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || 'Failed to fetch templates');
+  }
+  const data = await response.json();
+  if (data.error) throw new Error(data.error);
+  return Array.isArray(data) ? data : data.templates || [];
+}
+
+export async function createTemplate(formData: FormData) {
+  const user = auth.currentUser;
+  if (!user) throw new Error('User not authenticated');
+  
+  const token = await user.getIdToken();
+  const response = await fetch(`${API_BASE}/templates`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || 'Failed to create template');
+  }
+  return response.json();
+}
+
+export async function deleteTemplate(id: string) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/templates/${id}`, {
+    method: 'DELETE',
+    headers,
+  });
+  if (!response.ok) throw new Error('Failed to delete template');
   return response.json();
 }

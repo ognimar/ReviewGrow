@@ -2,7 +2,7 @@ import express, { type Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
 import cors from "cors";
-import { getFirestore, initializeFirebase, isAdmin } from "./firebase";
+import { getFirestore, getStorage, initializeFirebase, isAdmin } from "./firebase";
 import { authenticate, requireAdmin, type AuthRequest } from "./middleware/auth";
 import { parseCSV } from "./services/csvService";
 import { generatePersonalizedImages } from "./services/imageService";
@@ -280,6 +280,106 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Stripe checkout error:', error);
       res.status(500).json({ error: 'Failed to create checkout session' });
+    }
+  });
+
+  // Create Template
+  app.post("/api/templates", authenticate, upload.single('image'), async (req: AuthRequest, res) => {
+    try {
+      const { name, textX, textY, fontSize, fontColor } = req.body;
+
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      let imageUrl = '';
+      if (req.file) {
+        const storage = getStorage();
+        if (storage && process.env.OMNISEND_FIREBASE_STORAGE_BUCKET) {
+          try {
+            const bucket = storage.bucket(process.env.OMNISEND_FIREBASE_STORAGE_BUCKET);
+            const filename = `templates/${req.user!.uid}/${Date.now()}_${req.file.originalname}`;
+            const file = bucket.file(filename);
+            
+            await file.save(req.file.buffer, {
+              contentType: req.file.mimetype,
+            });
+            await file.makePublic();
+            imageUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
+          } catch (storageError) {
+            console.error('Storage upload error:', storageError);
+          }
+        }
+      }
+
+      const templateRef = await db.collection('templates').add({
+        name,
+        imageUrl,
+        textX: parseInt(textX) || 50,
+        textY: parseInt(textY) || 50,
+        fontSize: parseInt(fontSize) || 40,
+        fontColor: fontColor || '#ffffff',
+        ownerId: req.user!.uid,
+        createdAt: new Date().toISOString(),
+      });
+
+      res.json({ id: templateRef.id, success: true });
+    } catch (error) {
+      console.error('Create template error:', error);
+      res.status(500).json({ error: 'Failed to create template' });
+    }
+  });
+
+  // Get Templates
+  app.get("/api/templates", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const snapshot = await db.collection('templates')
+        .where('ownerId', '==', req.user!.uid)
+        .orderBy('createdAt', 'desc')
+        .get();
+
+      const templates = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      res.json(templates);
+    } catch (error) {
+      console.error('Get templates error:', error);
+      res.status(500).json({ error: 'Failed to fetch templates' });
+    }
+  });
+
+  // Delete Template
+  app.delete("/api/templates/:id", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const templateRef = db.collection('templates').doc(req.params.id);
+      const templateDoc = await templateRef.get();
+
+      if (!templateDoc.exists) {
+        return res.status(404).json({ error: 'Template not found' });
+      }
+
+      if (templateDoc.data()?.ownerId !== req.user!.uid) {
+        return res.status(403).json({ error: 'Not authorized' });
+      }
+
+      await templateRef.delete();
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Delete template error:', error);
+      res.status(500).json({ error: 'Failed to delete template' });
     }
   });
 
