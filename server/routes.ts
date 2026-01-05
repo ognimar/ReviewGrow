@@ -159,21 +159,29 @@ export async function registerRoutes(
   // Create Campaign
   app.post("/api/campaigns", authenticate, async (req: AuthRequest, res) => {
     try {
-      const { name, type, clientIds, message, templateId, scheduled } = req.body;
+      const { name, type, message, templateId, scheduled } = req.body;
 
       const db = getFirestore();
       if (!db) {
         return res.status(503).json({ error: 'Database not available' });
       }
 
+      const clientsSnapshot = await db.collection('clients')
+        .where('ownerId', '==', req.user!.uid)
+        .get();
+      
+      const recipientCount = clientsSnapshot.size;
+
       const campaignRef = await db.collection('campaigns').add({
         name,
         type,
-        clientIds,
         message,
-        templateId,
-        scheduled,
+        templateId: templateId || null,
+        scheduled: scheduled || null,
         status: 'draft',
+        recipientCount,
+        sentCount: 0,
+        failedCount: 0,
         ownerId: req.user!.uid,
         createdAt: new Date().toISOString(),
       });
@@ -294,21 +302,32 @@ export async function registerRoutes(
 
       let imageUrl = '';
       if (req.file) {
+        if (!process.env.OMNISEND_FIREBASE_STORAGE_BUCKET) {
+          return res.status(400).json({ 
+            error: 'Image storage not configured. Please set up Firebase Storage bucket.' 
+          });
+        }
+        
         const storage = getStorage();
-        if (storage && process.env.OMNISEND_FIREBASE_STORAGE_BUCKET) {
-          try {
-            const bucket = storage.bucket(process.env.OMNISEND_FIREBASE_STORAGE_BUCKET);
-            const filename = `templates/${req.user!.uid}/${Date.now()}_${req.file.originalname}`;
-            const file = bucket.file(filename);
-            
-            await file.save(req.file.buffer, {
-              contentType: req.file.mimetype,
-            });
-            await file.makePublic();
-            imageUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
-          } catch (storageError) {
-            console.error('Storage upload error:', storageError);
-          }
+        if (!storage) {
+          return res.status(503).json({ error: 'Storage service not available' });
+        }
+        
+        try {
+          const bucket = storage.bucket(process.env.OMNISEND_FIREBASE_STORAGE_BUCKET);
+          const filename = `templates/${req.user!.uid}/${Date.now()}_${req.file.originalname}`;
+          const file = bucket.file(filename);
+          
+          await file.save(req.file.buffer, {
+            contentType: req.file.mimetype,
+          });
+          await file.makePublic();
+          imageUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
+        } catch (storageError: any) {
+          console.error('Storage upload error:', storageError);
+          return res.status(500).json({ 
+            error: 'Failed to upload image. Please check storage bucket configuration.' 
+          });
         }
       }
 
