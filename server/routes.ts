@@ -2,7 +2,7 @@ import express, { type Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
 import cors from "cors";
-import { getFirestore, initializeFirebase } from "./firebase";
+import { getFirestore, initializeFirebase, isAdmin } from "./firebase";
 import { authenticate, requireAdmin, type AuthRequest } from "./middleware/auth";
 import { parseCSV } from "./services/csvService";
 import { generatePersonalizedImages } from "./services/imageService";
@@ -26,6 +26,71 @@ export async function registerRoutes(
   
   // Enable CORS for development
   app.use(cors());
+
+  // User Sync - creates/updates user document in Firestore after Firebase Auth
+  app.post("/api/auth/sync", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const user = req.user!;
+      const userRef = db.collection('users').doc(user.uid);
+      const userDoc = await userRef.get();
+
+      const userData = {
+        email: user.email,
+        displayName: user.email?.split('@')[0] || 'User',
+        isAdmin: isAdmin(user.email || ''),
+        lastLogin: new Date().toISOString(),
+      };
+
+      if (!userDoc.exists) {
+        await userRef.set({
+          ...userData,
+          createdAt: new Date().toISOString(),
+          smsQuota: 500,
+          emailQuota: 2000,
+          smsUsed: 0,
+          emailUsed: 0,
+          subscription: null,
+        });
+      } else {
+        await userRef.update(userData);
+      }
+
+      const updatedDoc = await userRef.get();
+      res.json({ 
+        success: true, 
+        user: { id: user.uid, ...updatedDoc.data() }
+      });
+    } catch (error) {
+      console.error('User sync error:', error);
+      res.status(500).json({ error: 'Failed to sync user' });
+    }
+  });
+
+  // Get current user profile
+  app.get("/api/auth/me", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const userDoc = await db.collection('users').doc(req.user!.uid).get();
+      
+      if (!userDoc.exists) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      res.json({ id: req.user!.uid, ...userDoc.data() });
+    } catch (error) {
+      console.error('Get user error:', error);
+      res.status(500).json({ error: 'Failed to fetch user' });
+    }
+  });
   
   // CSV Import
   app.post("/api/clients/import", authenticate, upload.single('file'), async (req: AuthRequest, res) => {

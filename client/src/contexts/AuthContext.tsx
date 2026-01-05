@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from 'firebase/auth';
 import { onAuthChange, signOut as firebaseSignOut } from '@/lib/firebase';
+import { syncUser } from '@/lib/api';
 
 interface AuthContextType {
   user: User | null;
@@ -26,8 +27,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const idToken = await firebaseUser.getIdToken();
         setToken(idToken);
         
-        const adminEmails = import.meta.env.VITE_OMNISEND_ADMIN_EMAILS?.split(',').map((e: string) => e.trim()) || [];
-        setIsAdmin(adminEmails.includes(firebaseUser.email || ''));
+        try {
+          const syncResult = await syncUser();
+          setIsAdmin(syncResult.user?.isAdmin || false);
+        } catch (error) {
+          console.error('Failed to sync user:', error);
+          const adminEmails = import.meta.env.VITE_OMNISEND_ADMIN_EMAILS?.split(',').map((e: string) => e.trim()) || [];
+          setIsAdmin(adminEmails.includes(firebaseUser.email || ''));
+        }
       } else {
         setToken(null);
         setIsAdmin(false);

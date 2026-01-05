@@ -15,6 +15,23 @@ async function getAuthHeaders() {
   };
 }
 
+export async function syncUser() {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/auth/sync`, {
+    method: 'POST',
+    headers,
+  });
+  if (!response.ok) throw new Error('Failed to sync user');
+  return response.json();
+}
+
+export async function fetchCurrentUser() {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/auth/me`, { headers });
+  if (!response.ok) throw new Error('Failed to fetch user');
+  return response.json();
+}
+
 export async function fetchClients() {
   const headers = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/clients`, { headers });
