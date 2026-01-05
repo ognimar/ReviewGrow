@@ -1,4 +1,4 @@
-# OmniSend - Omnichannel Marketing Platform
+# Contact Review Grow - Omnichannel Marketing Platform
 
 ## Overview
 Full-stack marketing platform with personalized image generation, SMS/Email campaigns, and Stripe payments.

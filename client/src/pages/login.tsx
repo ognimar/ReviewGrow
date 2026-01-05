@@ -59,10 +59,10 @@ export default function Login() {
         <div className="text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
             <div className="w-12 h-12 rounded-xl bg-primary text-primary-foreground flex items-center justify-center text-2xl font-bold">
-              O
+              C
             </div>
           </div>
-          <h1 className="text-4xl font-display font-bold tracking-tight">OmniSend</h1>
+          <h1 className="text-4xl font-display font-bold tracking-tight">Contact Review Grow</h1>
           <p className="text-muted-foreground mt-2">Personalized marketing campaigns</p>
         </div>
 
