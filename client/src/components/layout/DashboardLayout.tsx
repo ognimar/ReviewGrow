@@ -13,7 +13,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useQuery } from "@tanstack/react-query";
+import { fetchStats } from "@/lib/api";
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -30,9 +32,18 @@ const adminNavigation = [
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const [isAdmin, setIsAdmin] = useState(false); // Toggle for demo purposes
+  const { user, isAdmin, signOut } = useAuth();
+  const { data: stats } = useQuery({
+    queryKey: ['stats'],
+    queryFn: fetchStats,
+    refetchInterval: 30000,
+  });
 
   const currentNav = isAdmin ? [...navigation, ...adminNavigation] : navigation;
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -72,11 +83,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="p-4 border-t border-sidebar-border space-y-4">
           <div className="flex items-center gap-3 px-2">
             <div className="h-8 w-8 rounded-full bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-700 font-bold text-xs">
-              JD
+              {user?.email?.charAt(0).toUpperCase() || 'U'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">John Doe</p>
-              <p className="text-xs text-muted-foreground truncate">john@example.com</p>
+              <p className="text-sm font-medium truncate">{user?.displayName || 'User'}</p>
+              <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
             </div>
           </div>
           
@@ -86,25 +97,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="space-y-1">
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">SMS</span>
-                  <span className="font-medium">380 left</span>
+                  <span className="font-medium">{stats?.smsLeft || 0} left</span>
                 </div>
                 <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
-                  <div className="h-full bg-primary w-[24%] rounded-full" />
+                  <div className="h-full bg-primary w-[76%] rounded-full" />
                 </div>
               </div>
               <div className="space-y-1">
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Emails</span>
-                  <span className="font-medium">1,500 left</span>
+                  <span className="font-medium">{stats?.emailsLeft || 0} left</span>
                 </div>
                 <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
-                   <div className="h-full bg-green-500 w-[85%] rounded-full" />
+                   <div className="h-full bg-green-500 w-[15%] rounded-full" />
                 </div>
               </div>
             </div>
           )}
 
-          <Button variant="ghost" className="w-full justify-start gap-2 text-red-500 hover:text-red-600 hover:bg-red-50">
+          <Button 
+            variant="ghost" 
+            className="w-full justify-start gap-2 text-red-500 hover:text-red-600 hover:bg-red-50"
+            onClick={handleSignOut}
+          >
             <LogOut className="h-4 w-4" />
             Sign Out
           </Button>
