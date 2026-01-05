@@ -80,15 +80,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           </div>
           
-          <Button 
-             variant="outline" 
-             className="w-full justify-start gap-2 text-xs h-8"
-             onClick={() => setIsAdmin(!isAdmin)}
-          >
-            <ShieldCheck className="h-3 w-3" />
-            {isAdmin ? "Switch to User" : "Switch to Admin"}
-          </Button>
-
           {/* Usage Stats (User Only) */}
           {!isAdmin && (
             <div className="space-y-2 py-2">
