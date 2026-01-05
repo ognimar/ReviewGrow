@@ -23,10 +23,10 @@ const navigation = [
   { name: 'Campaigns', href: '/campaigns', icon: Send },
   { name: 'Templates', href: '/templates', icon: ImageIcon },
   { name: 'Billing', href: '/billing', icon: CreditCard },
-  { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
 const adminNavigation = [
+  { name: 'Settings', href: '/settings', icon: Settings },
   { name: 'User Management', href: '/admin/users', icon: ShieldCheck },
 ];
 

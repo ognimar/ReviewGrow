@@ -195,7 +195,6 @@ export async function registerRoutes(
 
       const snapshot = await db.collection('campaigns')
         .where('ownerId', '==', req.user!.uid)
-        .orderBy('createdAt', 'desc')
         .get();
 
       const campaigns = snapshot.docs.map(doc => ({
@@ -268,8 +267,8 @@ export async function registerRoutes(
           },
         ],
         mode: plan === 'yearly' ? 'payment' : 'subscription',
-        success_url: `${process.env.BASE_URL || 'http://localhost:5000'}/billing?success=true`,
-        cancel_url: `${process.env.BASE_URL || 'http://localhost:5000'}/billing?canceled=true`,
+        success_url: `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'http://localhost:5000'}/billing?success=true`,
+        cancel_url: `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'http://localhost:5000'}/billing?canceled=true`,
         metadata: {
           userId: req.user!.uid,
           plan,
@@ -341,7 +340,6 @@ export async function registerRoutes(
 
       const snapshot = await db.collection('templates')
         .where('ownerId', '==', req.user!.uid)
-        .orderBy('createdAt', 'desc')
         .get();
 
       const templates = snapshot.docs.map(doc => ({
