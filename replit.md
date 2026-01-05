@@ -17,21 +17,20 @@ Full-stack marketing platform with personalized image generation, SMS/Email camp
 
 ## Required Environment Variables
 
-### Firebase Configuration
+### Frontend Firebase (VITE_ prefix for client access)
 ```
-FIREBASE_SERVICE_ACCOUNT={"type":"service_account","project_id":"..."}
-FIREBASE_STORAGE_BUCKET=your-bucket-name.appspot.com
-```
-
-### Admin Access
-```
-ADMIN_EMAILS=admin1@example.com,admin2@example.com
+VITE_OMNISEND_FIREBASE_API_KEY=your-firebase-api-key
+VITE_OMNISEND_FIREBASE_PROJECT_ID=your-project-id
+VITE_OMNISEND_FIREBASE_APP_ID=your-app-id
+VITE_OMNISEND_ADMIN_EMAILS=admin1@example.com,admin2@example.com
 ```
 
-### Stripe Payments
+### Backend Firebase & Services
 ```
-STRIPE_SECRET_KEY=sk_test_...
-BASE_URL=https://your-domain.replit.app
+OMNISEND_FIREBASE_SERVICE_ACCOUNT={"type":"service_account","project_id":"..."}
+OMNISEND_FIREBASE_STORAGE_BUCKET=your-bucket-name.firebasestorage.app
+OMNISEND_ADMIN_EMAILS=admin1@example.com,admin2@example.com
+OMNISEND_STRIPE_SECRET_KEY=sk_live_...
 ```
 
 ### Optional: SMS/Email APIs
