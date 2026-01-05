@@ -89,6 +89,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {isAdmin ? "Switch to User" : "Switch to Admin"}
           </Button>
 
+          {/* Usage Stats (User Only) */}
+          {!isAdmin && (
+            <div className="space-y-2 py-2">
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">SMS Credits</span>
+                  <span className="font-medium">120/500</span>
+                </div>
+                <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                  <div className="h-full bg-primary w-[24%] rounded-full" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Emails</span>
+                  <span className="font-medium">8.5k/10k</span>
+                </div>
+                <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                   <div className="h-full bg-green-500 w-[85%] rounded-full" />
+                </div>
+              </div>
+            </div>
+          )}
+
           <Button variant="ghost" className="w-full justify-start gap-2 text-red-500 hover:text-red-600 hover:bg-red-50">
             <LogOut className="h-4 w-4" />
             Sign Out
