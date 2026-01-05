@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut, onAuthStateChanged, User } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut, onAuthStateChanged, User } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_OMNISEND_FIREBASE_API_KEY,
@@ -16,21 +16,22 @@ const googleProvider = new GoogleAuthProvider();
 
 export async function signInWithGoogle() {
   try {
-    await signInWithRedirect(auth, googleProvider);
-  } catch (error) {
+    const result = await signInWithPopup(auth, googleProvider);
+    return result.user;
+  } catch (error: any) {
     console.error('Google sign-in error:', error);
+    if (error.code === 'auth/popup-closed-by-user') {
+      throw new Error('Sign-in was cancelled. Please try again.');
+    }
+    if (error.code === 'auth/popup-blocked') {
+      throw new Error('Popup was blocked. Please allow popups for this site.');
+    }
     throw error;
   }
 }
 
 export async function handleGoogleRedirect() {
-  try {
-    const result = await getRedirectResult(auth);
-    return result?.user || null;
-  } catch (error) {
-    console.error('Google redirect error:', error);
-    return null;
-  }
+  return null;
 }
 
 export async function signInWithEmail(email: string, password: string) {

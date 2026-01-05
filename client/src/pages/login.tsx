@@ -35,13 +35,17 @@ export default function Login() {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     try {
-      await signInWithGoogle();
+      const user = await signInWithGoogle();
+      if (user) {
+        setLocation('/');
+      }
     } catch (error: any) {
       toast({
         title: 'Sign in failed',
         description: error.message,
         variant: 'destructive',
       });
+    } finally {
       setLoading(false);
     }
   };
