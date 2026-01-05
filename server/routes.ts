@@ -12,8 +12,8 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Initialize Stripe only if API key is available
 let stripe: Stripe | null = null;
-if (process.env.STRIPE_SECRET_KEY) {
-  stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2025-12-15.clover' });
+if (process.env.OMNISEND_STRIPE_SECRET_KEY) {
+  stripe = new Stripe(process.env.OMNISEND_STRIPE_SECRET_KEY, { apiVersion: '2025-12-15.clover' });
 }
 
 export async function registerRoutes(

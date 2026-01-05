@@ -7,8 +7,8 @@ export function initializeFirebase() {
     return firebaseApp;
   }
 
-  const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT 
-    ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+  const serviceAccount = process.env.OMNISEND_FIREBASE_SERVICE_ACCOUNT 
+    ? JSON.parse(process.env.OMNISEND_FIREBASE_SERVICE_ACCOUNT)
     : undefined;
 
   if (!serviceAccount) {
@@ -18,7 +18,7 @@ export function initializeFirebase() {
 
   firebaseApp = admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+    storageBucket: process.env.OMNISEND_FIREBASE_STORAGE_BUCKET,
   });
 
   return firebaseApp;
@@ -48,7 +48,7 @@ export async function verifyToken(token: string) {
   return await auth.verifyIdToken(token);
 }
 
-export const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
+export const ADMIN_EMAILS = (process.env.OMNISEND_ADMIN_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
 
 export function isAdmin(email: string): boolean {
   return ADMIN_EMAILS.includes(email);

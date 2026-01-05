@@ -26,7 +26,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const idToken = await firebaseUser.getIdToken();
         setToken(idToken);
         
-        const adminEmails = import.meta.env.VITE_ADMIN_EMAILS?.split(',').map((e: string) => e.trim()) || [];
+        const adminEmails = import.meta.env.VITE_OMNISEND_ADMIN_EMAILS?.split(',').map((e: string) => e.trim()) || [];
         setIsAdmin(adminEmails.includes(firebaseUser.email || ''));
       } else {
         setToken(null);
