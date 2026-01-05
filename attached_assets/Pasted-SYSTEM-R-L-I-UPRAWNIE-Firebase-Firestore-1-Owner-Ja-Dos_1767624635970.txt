@@ -1,0 +1,28 @@
+SYSTEM RÓL I UPRAWNIEŃ (Firebase + Firestore):
+1. Owner (Ja):
+    * Dostęp do specjalnego panelu "Admin Dashboard".
+    * Podgląd listy wszystkich zarejestrowanych użytkowników aplikacji.
+    * Możliwość sprawdzenia statusu subskrypcji każdego użytkownika.
+    * Globalne statystyki systemu (całkowita liczba wysłanych SMS/E-mail).
+2. User (Moi klienci):
+    * Dostęp tylko do własnych danych (całkowita izolacja danych).
+    * Możliwość konfiguracji własnych kluczy API /SMSAPI, Stripe).
+    * Własny dashboard statystyk, import list CSV, tworzenie własnych kampanii i szablonów.
+KLUCZOWE FUNKCJONALNOŚCI DLA UŻYTKOWNIKA:
+* Dynamiczna Personalizacja Obrazu: Generator (biblioteka sharp), który nakłada imię klienta z CSV na bazowe zdjęcie (np. tabliczkę) i zapisuje w Firebase Storage.
+* Kampanie Omnichannel: Wysyłka spersonalizowanych SMS (z grafiką MMS) oraz E-mail.
+* Edytor Wiadomości: Użytkownik sam definiuje treść z tagami {{name}}, {{link}}.
+* Import CSV: Obsługa kolumn Imię, Telefon, Email z walidacją numerów.
+* Live Preview: Możliwość wygenerowania jednego testowego zdjęcia przed startem masowej wysyłki.
+2. MODEL PŁATNOŚCI STRIPE (PLN): Zintegruj Stripe Checkout z następującą logiką:
+* Plan Miesięczny: Standardowa subskrypcja, płatna co miesiąc.
+* Plan Pro (Roczny): * UI: Musi wyświetlać cenę w przeliczeniu na miesiąc (np. "80 PLN / mies"), aby przyciągnąć klienta niską ceną.
+    * Płatność: Technicznie Stripe musi pobrać pełną kwotę za 12 miesięcy z góry podczas jednej transakcji.
+    * Dostęp: Po opłaceniu, użytkownik otrzymuje dostęp do funkcji Pro na 365 dni.
+WYMAGANIA TECHNICZNE:
+* Frontend: React + Tailwind CSS. Czysty, profesjonalny interfejs.
+* Izolacja Danych: Każdy dokument w Firestore musi posiadać ownerId. Reguły bezpieczeństwa Firebase muszą uniemożliwiać odczyt danych innych użytkowników.
+* Powiadomienia: System logujący sukcesy/błędy wysyłki w czasie rzeczywistym.
+UI/UX:
+* Sidebar z zakładkami: Dashboard, Klienci (CSV), Kampanie, Szablony Grafik, Płatności, Ustawienia API.
+* Dla Admina dodatkowa zakładka: Zarządzanie Użytkownikami.
