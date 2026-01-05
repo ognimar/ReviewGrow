@@ -9,7 +9,6 @@ import Dashboard from "@/pages/dashboard";
 import Clients from "@/pages/clients";
 import Campaigns from "@/pages/campaigns";
 import Billing from "@/pages/billing";
-import Settings from "@/pages/settings";
 import AdminUsers from "@/pages/admin-users";
 import Templates from "@/pages/templates";
 import Login from "@/pages/login";
@@ -50,9 +49,6 @@ function Router() {
       </Route>
       <Route path="/billing">
         {() => <ProtectedRoute component={Billing} />}
-      </Route>
-      <Route path="/settings">
-        {() => <ProtectedRoute component={Settings} />}
       </Route>
       <Route path="/admin/users">
         {() => <ProtectedRoute component={AdminUsers} />}

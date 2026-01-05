@@ -2,11 +2,18 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ShieldAlert } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Loader2, ShieldAlert, MoreHorizontal, Ban, MessageSquare, Mail, UserCheck } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchAdminUsers } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
+import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 interface AdminUser {
   id: string;
@@ -20,16 +27,69 @@ interface AdminUser {
   emailUsed: number;
   createdAt: string;
   lastLogin: string;
+  banned?: boolean;
 }
 
 export default function AdminUsers() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const [quotaDialog, setQuotaDialog] = useState<'sms' | 'email' | null>(null);
+  const [quotaAmount, setQuotaAmount] = useState("");
 
   const { data: users = [], isLoading, error } = useQuery<AdminUser[]>({
     queryKey: ['admin-users'],
     queryFn: fetchAdminUsers,
     enabled: isAdmin,
   });
+
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ userId, action, value }: { userId: string; action: string; value?: number }) => {
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await user?.getIdToken()}`
+        },
+        body: JSON.stringify({ action, value }),
+      });
+      if (!response.ok) throw new Error('Failed to update user');
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      const actionMessages: Record<string, string> = {
+        ban: 'User has been banned',
+        unban: 'User has been unbanned',
+        addSms: 'SMS quota updated',
+        addEmail: 'Email quota updated',
+      };
+      toast({ title: actionMessages[variables.action] || 'User updated' });
+      setQuotaDialog(null);
+      setSelectedUser(null);
+      setQuotaAmount("");
+    },
+    onError: () => {
+      toast({ title: 'Failed to update user', variant: 'destructive' });
+    },
+  });
+
+  const handleBanUser = (targetUser: AdminUser) => {
+    const action = targetUser.banned ? 'unban' : 'ban';
+    updateUserMutation.mutate({ userId: targetUser.id, action });
+  };
+
+  const handleAddQuota = () => {
+    if (!selectedUser || !quotaDialog || !quotaAmount) return;
+    const amount = parseInt(quotaAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast({ title: 'Please enter a valid number', variant: 'destructive' });
+      return;
+    }
+    const action = quotaDialog === 'sms' ? 'addSms' : 'addEmail';
+    updateUserMutation.mutate({ userId: selectedUser.id, action, value: amount });
+  };
 
   if (!isAdmin) {
     return (
@@ -52,7 +112,7 @@ export default function AdminUsers() {
       <div className="space-y-6">
         <div>
             <h1 className="text-3xl font-display font-bold tracking-tight" data-testid="text-page-title">User Management</h1>
-            <p className="text-muted-foreground">Admin only: Overview of all registered users and subscriptions.</p>
+            <p className="text-muted-foreground">Admin only: Manage users, quotas, and subscriptions.</p>
         </div>
 
         <div className="grid gap-4 md:grid-cols-4">
@@ -109,30 +169,84 @@ export default function AdminUsers() {
                   <TableRow>
                     <TableHead>User</TableHead>
                     <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>SMS Used</TableHead>
-                    <TableHead>Emails Sent</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>SMS Quota</TableHead>
+                    <TableHead>Email Quota</TableHead>
                     <TableHead>Joined</TableHead>
-                    <TableHead>Last Login</TableHead>
+                    <TableHead className="w-12">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.map((user) => (
-                    <TableRow key={user.id} data-testid={`row-user-${user.id}`}>
-                      <TableCell className="font-medium">{user.displayName}</TableCell>
-                      <TableCell>{user.email}</TableCell>
+                  {users.map((targetUser) => (
+                    <TableRow key={targetUser.id} data-testid={`row-user-${targetUser.id}`}>
+                      <TableCell className="font-medium">{targetUser.displayName}</TableCell>
+                      <TableCell>{targetUser.email}</TableCell>
                       <TableCell>
-                        <Badge variant={user.isAdmin ? 'default' : 'secondary'}>
-                          {user.isAdmin ? 'Admin' : 'User'}
-                        </Badge>
+                        <div className="flex gap-1">
+                          {targetUser.isAdmin && (
+                            <Badge variant="default">Admin</Badge>
+                          )}
+                          {targetUser.banned ? (
+                            <Badge variant="destructive">Banned</Badge>
+                          ) : (
+                            <Badge variant="secondary">Active</Badge>
+                          )}
+                        </div>
                       </TableCell>
-                      <TableCell>{user.smsUsed || 0} / {user.smsQuota || 0}</TableCell>
-                      <TableCell>{user.emailUsed || 0} / {user.emailQuota || 0}</TableCell>
+                      <TableCell>{targetUser.smsUsed || 0} / {targetUser.smsQuota || 0}</TableCell>
+                      <TableCell>{targetUser.emailUsed || 0} / {targetUser.emailQuota || 0}</TableCell>
                       <TableCell>
-                        {user.createdAt ? format(new Date(user.createdAt), 'MMM d, yyyy') : '-'}
+                        {targetUser.createdAt ? format(new Date(targetUser.createdAt), 'MMM d, yyyy') : '-'}
                       </TableCell>
                       <TableCell>
-                        {user.lastLogin ? format(new Date(user.lastLogin), 'MMM d, yyyy') : '-'}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" data-testid={`button-actions-${targetUser.id}`}>
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedUser(targetUser);
+                                setQuotaDialog('sms');
+                              }}
+                              data-testid={`menu-add-sms-${targetUser.id}`}
+                            >
+                              <MessageSquare className="mr-2 h-4 w-4" />
+                              Add SMS Quota
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedUser(targetUser);
+                                setQuotaDialog('email');
+                              }}
+                              data-testid={`menu-add-email-${targetUser.id}`}
+                            >
+                              <Mail className="mr-2 h-4 w-4" />
+                              Add Email Quota
+                            </DropdownMenuItem>
+                            {!targetUser.isAdmin && (
+                              <DropdownMenuItem
+                                onClick={() => handleBanUser(targetUser)}
+                                className={targetUser.banned ? "text-green-600" : "text-destructive"}
+                                data-testid={`menu-ban-${targetUser.id}`}
+                              >
+                                {targetUser.banned ? (
+                                  <>
+                                    <UserCheck className="mr-2 h-4 w-4" />
+                                    Unban User
+                                  </>
+                                ) : (
+                                  <>
+                                    <Ban className="mr-2 h-4 w-4" />
+                                    Ban User
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -142,6 +256,51 @@ export default function AdminUsers() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={!!quotaDialog} onOpenChange={(open) => !open && setQuotaDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Add {quotaDialog === 'sms' ? 'SMS' : 'Email'} Quota
+            </DialogTitle>
+            <DialogDescription>
+              Add quota for {selectedUser?.displayName || selectedUser?.email}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Current Quota</Label>
+              <p className="text-sm text-muted-foreground">
+                {quotaDialog === 'sms' 
+                  ? `${selectedUser?.smsUsed || 0} / ${selectedUser?.smsQuota || 0} SMS used`
+                  : `${selectedUser?.emailUsed || 0} / ${selectedUser?.emailQuota || 0} emails sent`
+                }
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="quota-amount">Amount to Add</Label>
+              <Input
+                id="quota-amount"
+                type="number"
+                min="1"
+                value={quotaAmount}
+                onChange={(e) => setQuotaAmount(e.target.value)}
+                placeholder="Enter amount..."
+                data-testid="input-quota-amount"
+              />
+            </div>
+            <Button 
+              className="w-full" 
+              onClick={handleAddQuota}
+              disabled={updateUserMutation.isPending}
+              data-testid="button-confirm-quota"
+            >
+              {updateUserMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Add Quota
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

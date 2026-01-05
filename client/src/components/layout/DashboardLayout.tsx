@@ -6,7 +6,6 @@ import {
   Send, 
   Image as ImageIcon, 
   CreditCard, 
-  Settings, 
   ShieldCheck,
   LogOut,
   Menu
@@ -26,7 +25,6 @@ const navigation = [
 ];
 
 const adminNavigation = [
-  { name: 'Settings', href: '/settings', icon: Settings },
   { name: 'User Management', href: '/admin/users', icon: ShieldCheck },
 ];
 

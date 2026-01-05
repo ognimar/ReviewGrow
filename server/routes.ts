@@ -421,5 +421,61 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Update User (ban, add quota)
+  app.patch("/api/admin/users/:id", authenticate, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { action, value } = req.body;
+      const userId = req.params.id;
+
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const userRef = db.collection('users').doc(userId);
+      const userDoc = await userRef.get();
+
+      if (!userDoc.exists) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      const userData = userDoc.data()!;
+
+      switch (action) {
+        case 'ban':
+          await userRef.update({ banned: true });
+          break;
+        case 'unban':
+          await userRef.update({ banned: false });
+          break;
+        case 'addSms': {
+          const amount = parseInt(value, 10);
+          if (isNaN(amount) || amount <= 0) {
+            return res.status(400).json({ error: 'Invalid quota amount' });
+          }
+          const newSmsQuota = (userData.smsQuota || 0) + amount;
+          await userRef.update({ smsQuota: newSmsQuota });
+          break;
+        }
+        case 'addEmail': {
+          const amount = parseInt(value, 10);
+          if (isNaN(amount) || amount <= 0) {
+            return res.status(400).json({ error: 'Invalid quota amount' });
+          }
+          const newEmailQuota = (userData.emailQuota || 0) + amount;
+          await userRef.update({ emailQuota: newEmailQuota });
+          break;
+        }
+        default:
+          return res.status(400).json({ error: 'Invalid action' });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Update user error:', error);
+      res.status(500).json({ error: 'Failed to update user' });
+    }
+  });
+
   return httpServer;
 }
