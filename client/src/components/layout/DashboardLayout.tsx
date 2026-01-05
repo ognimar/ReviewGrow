@@ -94,8 +94,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="space-y-2 py-2">
               <div className="space-y-1">
                 <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">SMS Credits</span>
-                  <span className="font-medium">120/500</span>
+                  <span className="text-muted-foreground">SMS</span>
+                  <span className="font-medium">380 left</span>
                 </div>
                 <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
                   <div className="h-full bg-primary w-[24%] rounded-full" />
@@ -104,7 +104,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="space-y-1">
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Emails</span>
-                  <span className="font-medium">8.5k/10k</span>
+                  <span className="font-medium">1,500 left</span>
                 </div>
                 <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
                    <div className="h-full bg-green-500 w-[85%] rounded-full" />
