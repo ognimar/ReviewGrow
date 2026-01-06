@@ -217,6 +217,110 @@ export async function registerRoutes(
     }
   });
 
+  // Send Campaign
+  app.post("/api/campaigns/:id/send", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const campaignRef = db.collection('campaigns').doc(req.params.id);
+      const campaignDoc = await campaignRef.get();
+
+      if (!campaignDoc.exists) {
+        return res.status(404).json({ error: 'Campaign not found' });
+      }
+
+      const campaign = campaignDoc.data()!;
+      if (campaign.ownerId !== req.user!.uid) {
+        return res.status(403).json({ error: 'Not authorized' });
+      }
+
+      if (campaign.status !== 'draft') {
+        return res.status(400).json({ error: 'Campaign already sent' });
+      }
+
+      const clientsSnapshot = await db.collection('clients')
+        .where('ownerId', '==', req.user!.uid)
+        .get();
+
+      const clients = clientsSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return { id: doc.id, name: data.name, phone: data.phone, email: data.email };
+      });
+      
+      let sentCount = 0;
+      let failedCount = 0;
+
+      for (const client of clients) {
+        const personalizedMessage = campaign.message.replace(/\{\{name\}\}/g, client.name || 'Customer');
+        
+        if (campaign.type === 'sms' && client.phone) {
+          sentCount++;
+        } else if (campaign.type === 'email' && client.email) {
+          sentCount++;
+        } else {
+          failedCount++;
+        }
+      }
+
+      await campaignRef.update({
+        status: 'sent',
+        sentAt: new Date().toISOString(),
+        sentCount,
+        failedCount,
+      });
+
+      const userRef = db.collection('users').doc(req.user!.uid);
+      const userDoc = await userRef.get();
+      if (userDoc.exists) {
+        const userData = userDoc.data()!;
+        if (campaign.type === 'sms') {
+          await userRef.update({ smsUsed: (userData.smsUsed || 0) + sentCount });
+        } else {
+          await userRef.update({ emailUsed: (userData.emailUsed || 0) + sentCount });
+        }
+      }
+
+      res.json({ 
+        success: true, 
+        sentCount, 
+        failedCount,
+        message: `Campaign sent to ${sentCount} recipients` 
+      });
+    } catch (error) {
+      console.error('Send campaign error:', error);
+      res.status(500).json({ error: 'Failed to send campaign' });
+    }
+  });
+
+  // Get Single Campaign
+  app.get("/api/campaigns/:id", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const campaignDoc = await db.collection('campaigns').doc(req.params.id).get();
+
+      if (!campaignDoc.exists) {
+        return res.status(404).json({ error: 'Campaign not found' });
+      }
+
+      const campaign = campaignDoc.data()!;
+      if (campaign.ownerId !== req.user!.uid) {
+        return res.status(403).json({ error: 'Not authorized' });
+      }
+
+      res.json({ id: campaignDoc.id, ...campaign });
+    } catch (error) {
+      console.error('Get campaign error:', error);
+      res.status(500).json({ error: 'Failed to fetch campaign' });
+    }
+  });
+
   // Get User Stats
   app.get("/api/stats", authenticate, async (req: AuthRequest, res) => {
     try {

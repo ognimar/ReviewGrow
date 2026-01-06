@@ -7,10 +7,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Mail, MessageSquare, Loader2, Megaphone, Send } from "lucide-react";
+import { Plus, Mail, MessageSquare, Loader2, Megaphone, Send, Eye, CheckCircle } from "lucide-react";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchCampaigns, fetchClients, fetchTemplates, createCampaign } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
@@ -20,7 +21,11 @@ interface Campaign {
   type: string;
   status: string;
   createdAt: string;
+  sentAt?: string;
   message?: string;
+  recipientCount?: number;
+  sentCount?: number;
+  failedCount?: number;
 }
 
 interface Client {
@@ -37,8 +42,10 @@ interface Template {
 
 export default function Campaigns() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [viewingCampaign, setViewingCampaign] = useState<Campaign | null>(null);
   const [campaignName, setCampaignName] = useState("");
   const [campaignType, setCampaignType] = useState<string>("");
   const [message, setMessage] = useState("");
@@ -70,6 +77,48 @@ export default function Campaigns() {
     onError: (error: any) => {
       toast({ 
         title: 'Failed to create campaign', 
+        description: error.message,
+        variant: 'destructive' 
+      });
+    },
+  });
+
+  const sendMutation = useMutation({
+    mutationFn: async (campaignId: string) => {
+      if (!user) throw new Error('Not authenticated');
+      const response = await fetch(`/api/campaigns/${campaignId}/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await user.getIdToken()}`
+        },
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to send');
+      }
+      return response.json();
+    },
+    onSuccess: (data, campaignId) => {
+      toast({ 
+        title: 'Campaign sent!', 
+        description: `Sent to ${data.sentCount} recipients` 
+      });
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+      if (viewingCampaign?.id === campaignId) {
+        setViewingCampaign({
+          ...viewingCampaign,
+          status: 'sent',
+          sentAt: new Date().toISOString(),
+          sentCount: data.sentCount,
+          failedCount: data.failedCount,
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: 'Failed to send campaign', 
         description: error.message,
         variant: 'destructive' 
       });
@@ -108,6 +157,10 @@ export default function Campaigns() {
       templateId: selectedTemplate || null,
       scheduled: null,
     });
+  };
+
+  const handleSendCampaign = (campaignId: string) => {
+    sendMutation.mutate(campaignId);
   };
 
   const getStatusVariant = (status: string) => {
@@ -272,6 +325,12 @@ export default function Campaigns() {
                     <span>Type</span>
                     <span className="font-medium text-foreground capitalize">{campaign.type}</span>
                   </div>
+                  {campaign.status === 'sent' && (
+                    <div className="flex justify-between text-sm text-muted-foreground mt-1">
+                      <span>Sent</span>
+                      <span className="font-medium text-foreground">{campaign.sentCount || 0}</span>
+                    </div>
+                  )}
                   {campaign.message && (
                     <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
                       {campaign.message}
@@ -280,12 +339,34 @@ export default function Campaigns() {
                 </CardContent>
                 <CardFooter className="gap-2">
                   {campaign.status === 'draft' && (
-                    <Button className="flex-1" data-testid={`button-send-campaign-${campaign.id}`}>
-                      <Send className="mr-2 h-4 w-4" /> Send Now
+                    <Button 
+                      className="flex-1" 
+                      onClick={() => handleSendCampaign(campaign.id)}
+                      disabled={sendMutation.isPending}
+                      data-testid={`button-send-campaign-${campaign.id}`}
+                    >
+                      {sendMutation.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="mr-2 h-4 w-4" />
+                      )}
+                      Send Now
                     </Button>
                   )}
-                  <Button variant="outline" className="flex-1" data-testid={`button-view-campaign-${campaign.id}`}>
-                    View Details
+                  {campaign.status === 'sent' && (
+                    <Button variant="outline" className="flex-1" disabled>
+                      <CheckCircle className="mr-2 h-4 w-4 text-green-500" />
+                      Sent
+                    </Button>
+                  )}
+                  <Button 
+                    variant="outline" 
+                    className="flex-1" 
+                    onClick={() => setViewingCampaign(campaign)}
+                    data-testid={`button-view-campaign-${campaign.id}`}
+                  >
+                    <Eye className="mr-2 h-4 w-4" />
+                    Details
                   </Button>
                 </CardFooter>
               </Card>
@@ -293,6 +374,66 @@ export default function Campaigns() {
           </div>
         )}
       </div>
+
+      <Dialog open={!!viewingCampaign} onOpenChange={(open) => !open && setViewingCampaign(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{viewingCampaign?.name}</DialogTitle>
+            <DialogDescription>
+              Campaign details and statistics
+            </DialogDescription>
+          </DialogHeader>
+          {viewingCampaign && (
+            <div className="space-y-4 py-4">
+              <div className="flex items-center gap-2">
+                <Badge variant={getStatusVariant(viewingCampaign.status)}>
+                  {viewingCampaign.status}
+                </Badge>
+                <Badge variant="outline" className="capitalize">
+                  {viewingCampaign.type}
+                </Badge>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Message</Label>
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <p className="text-sm whitespace-pre-wrap">{viewingCampaign.message}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground">Created</p>
+                  <p className="text-sm font-medium">
+                    {format(new Date(viewingCampaign.createdAt), 'MMM d, yyyy h:mm a')}
+                  </p>
+                </div>
+                {viewingCampaign.sentAt && (
+                  <div className="bg-muted/50 rounded-lg p-3">
+                    <p className="text-xs text-muted-foreground">Sent</p>
+                    <p className="text-sm font-medium">
+                      {format(new Date(viewingCampaign.sentAt), 'MMM d, yyyy h:mm a')}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {viewingCampaign.status === 'sent' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+                    <p className="text-xs text-green-600">Delivered</p>
+                    <p className="text-2xl font-bold text-green-700">{viewingCampaign.sentCount || 0}</p>
+                  </div>
+                  <div className="bg-red-50 rounded-lg p-3 border border-red-200">
+                    <p className="text-xs text-red-600">Failed</p>
+                    <p className="text-2xl font-bold text-red-700">{viewingCampaign.failedCount || 0}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }
