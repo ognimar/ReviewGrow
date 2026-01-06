@@ -66,16 +66,20 @@ export default function Settings() {
     },
   });
 
-  const { data: accounts, isLoading: accountsLoading } = useQuery<{ accounts: GoogleAccount[] }>({
+  const { data: accounts, isLoading: accountsLoading, error: accountsError, refetch: refetchAccounts } = useQuery<{ accounts: GoogleAccount[] }>({
     queryKey: ['google-accounts'],
     queryFn: async () => {
       const response = await fetch('/api/google/accounts', {
         headers: { 'Authorization': `Bearer ${await user?.getIdToken()}` },
       });
-      if (!response.ok) throw new Error('Failed to fetch accounts');
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to fetch accounts');
+      }
       return response.json();
     },
     enabled: googleStatus?.connected === true && !googleStatus?.business,
+    retry: false,
   });
 
   const { data: locations, isLoading: locationsLoading } = useQuery<{ locations: GoogleLocation[] }>({
@@ -257,6 +261,24 @@ export default function Settings() {
                   <div className="flex items-center gap-2 py-4">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     <span className="text-sm text-muted-foreground">Loading your business accounts...</span>
+                  </div>
+                ) : accountsError ? (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
+                    <p className="text-sm text-red-800">
+                      {(accountsError as Error).message.includes('Quota exceeded') 
+                        ? 'Rate limit reached. Please wait a moment and try again.'
+                        : (accountsError as Error).message.includes('API has not been used')
+                        ? 'The Google My Business API needs to be enabled. Please enable it in Google Cloud Console and try again.'
+                        : (accountsError as Error).message}
+                    </p>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => refetchAccounts()}
+                      data-testid="button-retry-accounts"
+                    >
+                      Try Again
+                    </Button>
                   </div>
                 ) : accounts?.accounts && accounts.accounts.length > 0 ? (
                   <div className="space-y-4">
