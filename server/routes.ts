@@ -392,11 +392,20 @@ export async function registerRoutes(
       const userDoc = await db.collection('users').doc(req.user!.uid).get();
       const userData = userDoc.data();
 
+      const clientsSnapshot = await db.collection('clients')
+        .where('ownerId', '==', req.user!.uid)
+        .get();
+
+      const smsQuota = userData?.smsQuota || 0;
+      const smsUsed = userData?.smsUsed || 0;
+      const emailQuota = userData?.emailQuota || 0;
+      const emailUsed = userData?.emailUsed || 0;
+
       res.json({
-        smsLeft: userData?.smsLeft || 380,
-        emailsLeft: userData?.emailsLeft || 1500,
-        totalClients: userData?.totalClients || 0,
-        totalSent: userData?.totalSent || 0,
+        smsLeft: Math.max(0, smsQuota - smsUsed),
+        emailsLeft: Math.max(0, emailQuota - emailUsed),
+        totalClients: clientsSnapshot.size,
+        totalSent: smsUsed + emailUsed,
       });
     } catch (error) {
       console.error('Get stats error:', error);
