@@ -84,6 +84,37 @@ export function generateReviewLink(placeId: string): string {
   return `https://search.google.com/local/writereview?placeid=${placeId}`;
 }
 
+export async function replyToReview(
+  accessToken: string, 
+  reviewName: string, 
+  replyText: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(
+      `https://mybusiness.googleapis.com/v4/${reviewName}/reply`,
+      {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          comment: replyText,
+        }),
+      }
+    );
+    
+    if (!response.ok) {
+      const error = await response.json();
+      return { success: false, error: error.error?.message || 'Failed to reply' };
+    }
+    
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Network error' };
+  }
+}
+
 export async function refreshAccessToken(refreshToken: string) {
   const oauth2Client = getOAuth2Client();
   oauth2Client.setCredentials({ refresh_token: refreshToken });

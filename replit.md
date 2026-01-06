@@ -78,6 +78,11 @@ SENDGRID_API_KEY=your-sendgrid-key
 Run `npm run dev` to start the development server on port 5000.
 
 ## Recent Changes
+- 2026-01-06: Implemented AI auto-reply for Google reviews (4-5 stars)
+  - Created aiReplyService.ts using OpenAI via Replit AI Integrations
+  - Added auto-reply settings (toggle, min stars, custom instructions) 
+  - Polish language responses, personalized with reviewer name
+  - Manual "Process Reviews Now" button with tracking of replied reviews
 - 2026-01-06: Added Google Business Profile OAuth integration with business.manage scope
 - 2026-01-06: Created Settings page for Google Business connection management
 - 2026-01-06: Added {{google_link}} template tag for review request campaigns

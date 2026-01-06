@@ -3,12 +3,22 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Link2, Unlink, MapPin, Star, ExternalLink, Building2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Loader2, Link2, Unlink, MapPin, Star, ExternalLink, Building2, Bot, Sparkles, Play } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
+
+interface AutoReplySettings {
+  enabled: boolean;
+  minStars: number;
+  instructions: string;
+}
 
 interface GoogleStatus {
   connected: boolean;
@@ -47,6 +57,9 @@ export default function Settings() {
   const [location] = useLocation();
   const [selectedAccount, setSelectedAccount] = useState<string>("");
   const [selectedLocation, setSelectedLocation] = useState<GoogleLocation | null>(null);
+  const [autoReplyEnabled, setAutoReplyEnabled] = useState(false);
+  const [minStars, setMinStars] = useState(4);
+  const [aiInstructions, setAiInstructions] = useState("");
 
   useEffect(() => {
     if (location.includes('connected=google')) {
@@ -160,6 +173,73 @@ export default function Settings() {
     },
     onError: () => {
       toast({ title: 'Failed to disconnect', variant: 'destructive' });
+    },
+  });
+
+  const { data: autoReplySettings, isLoading: autoReplyLoading } = useQuery<AutoReplySettings>({
+    queryKey: ['auto-reply-settings'],
+    queryFn: async () => {
+      const response = await fetch('/api/google/auto-reply/settings', {
+        headers: { 'Authorization': `Bearer ${await user?.getIdToken()}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch settings');
+      return response.json();
+    },
+    enabled: googleStatus?.connected === true && !!googleStatus?.business,
+  });
+
+  useEffect(() => {
+    if (autoReplySettings) {
+      setAutoReplyEnabled(autoReplySettings.enabled);
+      setMinStars(autoReplySettings.minStars);
+      setAiInstructions(autoReplySettings.instructions);
+    }
+  }, [autoReplySettings]);
+
+  const saveAutoReplyMutation = useMutation({
+    mutationFn: async (settings: AutoReplySettings) => {
+      const response = await fetch('/api/google/auto-reply/settings', {
+        method: 'PUT',
+        headers: { 
+          'Authorization': `Bearer ${await user?.getIdToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settings),
+      });
+      if (!response.ok) throw new Error('Failed to save settings');
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Auto-reply settings saved!' });
+      queryClient.invalidateQueries({ queryKey: ['auto-reply-settings'] });
+    },
+    onError: () => {
+      toast({ title: 'Failed to save settings', variant: 'destructive' });
+    },
+  });
+
+  const processReviewsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/google/auto-reply/process', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${await user?.getIdToken()}` },
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to process reviews');
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (data.processed > 0) {
+        const successful = data.results.filter((r: any) => r.success).length;
+        toast({ title: `Replied to ${successful} of ${data.processed} reviews` });
+      } else {
+        toast({ title: 'No new reviews to reply to' });
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: error.message || 'Failed to process reviews', variant: 'destructive' });
     },
   });
 
@@ -403,6 +483,132 @@ export default function Settings() {
             )}
           </CardContent>
         </Card>
+
+        {/* AI Auto-Reply Section - Only show when Google Business is connected */}
+        {googleStatus?.connected && googleStatus?.business && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="h-5 w-5 text-primary" />
+                AI Auto-Reply
+                <Badge variant="secondary" className="ml-2">
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  AI
+                </Badge>
+              </CardTitle>
+              <CardDescription>
+                Automatically respond to positive Google reviews using AI-generated personalized replies in Polish.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {autoReplyLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="auto-reply-toggle">Enable Auto-Reply</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Automatically reply to new positive reviews
+                      </p>
+                    </div>
+                    <Switch
+                      id="auto-reply-toggle"
+                      checked={autoReplyEnabled}
+                      onCheckedChange={setAutoReplyEnabled}
+                      data-testid="switch-auto-reply"
+                    />
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label>Minimum Star Rating</Label>
+                      <Badge variant="outline" className="font-mono">
+                        {minStars}+ stars
+                      </Badge>
+                    </div>
+                    <Slider
+                      value={[minStars]}
+                      onValueChange={([value]) => setMinStars(value)}
+                      min={1}
+                      max={5}
+                      step={1}
+                      className="w-full"
+                      data-testid="slider-min-stars"
+                    />
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>1 star</span>
+                      <span>5 stars</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Only reply to reviews with {minStars} or more stars
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="ai-instructions">Custom AI Instructions (optional)</Label>
+                    <Textarea
+                      id="ai-instructions"
+                      placeholder="e.g., Mention our new summer promotion, Sign off with 'Your team at [Business Name]'"
+                      value={aiInstructions}
+                      onChange={(e) => setAiInstructions(e.target.value)}
+                      rows={3}
+                      data-testid="textarea-ai-instructions"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Add specific instructions for the AI to follow when generating replies.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={() => saveAutoReplyMutation.mutate({
+                        enabled: autoReplyEnabled,
+                        minStars,
+                        instructions: aiInstructions,
+                      })}
+                      disabled={saveAutoReplyMutation.isPending}
+                      data-testid="button-save-auto-reply"
+                    >
+                      {saveAutoReplyMutation.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
+                      Save Settings
+                    </Button>
+
+                    {autoReplyEnabled && (
+                      <Button
+                        variant="outline"
+                        onClick={() => processReviewsMutation.mutate()}
+                        disabled={processReviewsMutation.isPending}
+                        data-testid="button-process-reviews"
+                      >
+                        {processReviewsMutation.isPending ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Play className="mr-2 h-4 w-4" />
+                        )}
+                        Process Reviews Now
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="bg-muted/50 rounded-lg p-4 text-sm">
+                    <p className="font-medium mb-2">How it works:</p>
+                    <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                      <li>AI generates personalized replies in Polish (2-4 sentences)</li>
+                      <li>Reviews already replied to are skipped</li>
+                      <li>Click "Process Reviews Now" to reply to pending reviews</li>
+                      <li>Uses your custom instructions if provided</li>
+                    </ul>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </DashboardLayout>
   );

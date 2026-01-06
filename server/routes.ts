@@ -8,7 +8,8 @@ import { authenticate, requireAdmin, type AuthRequest } from "./middleware/auth"
 import { parseCSV } from "./services/csvService";
 import { generatePersonalizedImages } from "./services/imageService";
 import { sendSMS } from "./services/smsService";
-import { generateAuthUrl, exchangeCodeForTokens, getAccounts, getLocations, getReviews, generateReviewLink, refreshAccessToken } from "./services/googleBusinessService";
+import { generateAuthUrl, exchangeCodeForTokens, getAccounts, getLocations, getReviews, generateReviewLink, refreshAccessToken, replyToReview } from "./services/googleBusinessService";
+import { generateAIReply } from "./services/aiReplyService";
 import Stripe from "stripe";
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -888,6 +889,152 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Disconnect error:', error);
       res.status(500).json({ error: 'Failed to disconnect' });
+    }
+  });
+
+  // Get AI auto-reply settings
+  app.get("/api/google/auto-reply/settings", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const userDoc = await db.collection('users').doc(req.user!.uid).get();
+      const userData = userDoc.data();
+
+      const settings = userData?.autoReplySettings || {
+        enabled: false,
+        minStars: 4,
+        instructions: '',
+      };
+
+      res.json(settings);
+    } catch (error) {
+      console.error('Get auto-reply settings error:', error);
+      res.status(500).json({ error: 'Failed to fetch settings' });
+    }
+  });
+
+  // Update AI auto-reply settings
+  app.put("/api/google/auto-reply/settings", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const { enabled, minStars, instructions } = req.body;
+
+      await db.collection('users').doc(req.user!.uid).update({
+        autoReplySettings: {
+          enabled: !!enabled,
+          minStars: Math.max(1, Math.min(5, minStars || 4)),
+          instructions: instructions || '',
+        },
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Update auto-reply settings error:', error);
+      res.status(500).json({ error: 'Failed to update settings' });
+    }
+  });
+
+  // Process reviews and auto-reply
+  app.post("/api/google/auto-reply/process", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const userDoc = await db.collection('users').doc(req.user!.uid).get();
+      const userData = userDoc.data();
+
+      if (!userData?.googleTokens?.accessToken) {
+        return res.status(400).json({ error: 'Google Business not connected' });
+      }
+
+      const settings = userData?.autoReplySettings;
+      if (!settings?.enabled) {
+        return res.status(400).json({ error: 'Auto-reply is disabled' });
+      }
+
+      const locationName = userData?.googleBusiness?.locationName;
+      if (!locationName) {
+        return res.status(400).json({ error: 'No location selected' });
+      }
+
+      let accessToken = userData.googleTokens.accessToken;
+      
+      // Refresh token if needed
+      if (userData.googleTokens.expiresAt && userData.googleTokens.expiresAt < Date.now()) {
+        try {
+          const tokens = await refreshAccessToken(userData.googleTokens.refreshToken);
+          accessToken = tokens.access_token!;
+          await db.collection('users').doc(req.user!.uid).update({
+            'googleTokens.accessToken': accessToken,
+            'googleTokens.expiresAt': tokens.expiry_date || Date.now() + 3600000,
+          });
+        } catch (e) {
+          return res.status(401).json({ error: 'Token refresh failed' });
+        }
+      }
+
+      // Fetch reviews
+      const reviewsData = await getReviews(accessToken, locationName);
+      const reviews = reviewsData.reviews || [];
+
+      const repliedReviews = userData.repliedReviews || [];
+      const results: { reviewName: string; success: boolean; error?: string }[] = [];
+
+      for (const review of reviews) {
+        // Skip if already replied or has a reply
+        if (repliedReviews.includes(review.name) || review.reviewReply) {
+          continue;
+        }
+
+        // Check star rating
+        const stars = parseInt(review.starRating?.replace('STAR_RATING_', '') || '0');
+        if (stars < settings.minStars) {
+          continue;
+        }
+
+        try {
+          // Generate AI reply
+          const replyText = await generateAIReply(
+            {
+              reviewText: review.comment || '',
+              authorName: review.reviewer?.displayName || 'Klient',
+              stars,
+            },
+            settings
+          );
+
+          // Post reply
+          const result = await replyToReview(accessToken, review.name, replyText);
+          
+          if (result.success) {
+            // Track replied review
+            await db.collection('users').doc(req.user!.uid).update({
+              repliedReviews: FieldValue.arrayUnion(review.name),
+            });
+          }
+
+          results.push({ reviewName: review.name, success: result.success, error: result.error });
+        } catch (e: any) {
+          results.push({ reviewName: review.name, success: false, error: e.message });
+        }
+      }
+
+      res.json({ 
+        processed: results.length,
+        results,
+      });
+    } catch (error: any) {
+      console.error('Process reviews error:', error);
+      res.status(500).json({ error: error.message || 'Failed to process reviews' });
     }
   });
 
