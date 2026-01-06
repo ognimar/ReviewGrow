@@ -83,6 +83,7 @@ Run `npm run dev` to start the development server on port 5000.
   - Added auto-reply settings (toggle, min stars, custom instructions) 
   - Polish language responses, personalized with reviewer name
   - Manual "Process Reviews Now" button with tracking of replied reviews
+  - Automatic background scheduler runs every 2 hours for all users with auto-reply enabled
 - 2026-01-06: Added Google Business Profile OAuth integration with business.manage scope
 - 2026-01-06: Created Settings page for Google Business connection management
 - 2026-01-06: Added {{google_link}} template tag for review request campaigns
