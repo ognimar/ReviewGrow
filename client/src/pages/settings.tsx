@@ -2,9 +2,8 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Loader2, Link2, Unlink, MapPin, Star, ExternalLink, Edit } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, Link2, Unlink, MapPin, Star, ExternalLink, Building2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -22,18 +21,36 @@ interface GoogleStatus {
   } | null;
 }
 
+interface GoogleAccount {
+  name: string;
+  accountName: string;
+  type: string;
+}
+
+interface GoogleLocation {
+  name: string;
+  title: string;
+  storefrontAddress?: {
+    addressLines?: string[];
+    locality?: string;
+    postalCode?: string;
+  };
+  metadata?: {
+    placeId?: string;
+  };
+}
+
 export default function Settings() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [location] = useLocation();
-  const [manualPlaceId, setManualPlaceId] = useState("");
-  const [manualTitle, setManualTitle] = useState("");
-  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<string>("");
+  const [selectedLocation, setSelectedLocation] = useState<GoogleLocation | null>(null);
 
   useEffect(() => {
     if (location.includes('connected=google')) {
-      toast({ title: 'Google account connected! Now enter your business details.' });
+      toast({ title: 'Google account connected! Now select your business location.' });
       queryClient.invalidateQueries({ queryKey: ['google-status'] });
     }
   }, [location]);
@@ -47,6 +64,34 @@ export default function Settings() {
       if (!response.ok) throw new Error('Failed to fetch status');
       return response.json();
     },
+  });
+
+  const { data: accounts, isLoading: accountsLoading, error: accountsError, refetch: refetchAccounts } = useQuery<{ accounts: GoogleAccount[] }>({
+    queryKey: ['google-accounts'],
+    queryFn: async () => {
+      const response = await fetch('/api/google/accounts', {
+        headers: { 'Authorization': `Bearer ${await user?.getIdToken()}` },
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to fetch accounts');
+      }
+      return response.json();
+    },
+    enabled: googleStatus?.connected === true && !googleStatus?.business,
+    retry: false,
+  });
+
+  const { data: locations, isLoading: locationsLoading } = useQuery<{ locations: GoogleLocation[] }>({
+    queryKey: ['google-locations', selectedAccount],
+    queryFn: async () => {
+      const response = await fetch(`/api/google/locations/${encodeURIComponent(selectedAccount)}`, {
+        headers: { 'Authorization': `Bearer ${await user?.getIdToken()}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch locations');
+      return response.json();
+    },
+    enabled: !!selectedAccount,
   });
 
   const connectMutation = useMutation({
@@ -64,7 +109,15 @@ export default function Settings() {
   });
 
   const saveLocationMutation = useMutation({
-    mutationFn: async ({ placeId, title }: { placeId: string; title: string }) => {
+    mutationFn: async (loc: GoogleLocation) => {
+      const address = loc.storefrontAddress 
+        ? [
+            ...(loc.storefrontAddress.addressLines || []),
+            loc.storefrontAddress.locality,
+            loc.storefrontAddress.postalCode
+          ].filter(Boolean).join(', ')
+        : 'Address not available';
+
       const response = await fetch('/api/google/location', {
         method: 'POST',
         headers: { 
@@ -72,10 +125,10 @@ export default function Settings() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          locationName: 'manual',
-          placeId,
-          title,
-          address: 'Entered manually',
+          locationName: loc.name,
+          placeId: loc.metadata?.placeId || '',
+          title: loc.title,
+          address,
         }),
       });
       if (!response.ok) throw new Error('Failed to save location');
@@ -84,9 +137,6 @@ export default function Settings() {
     onSuccess: () => {
       toast({ title: 'Business location saved!' });
       queryClient.invalidateQueries({ queryKey: ['google-status'] });
-      setManualPlaceId("");
-      setManualTitle("");
-      setShowManualEntry(false);
     },
     onError: () => {
       toast({ title: 'Failed to save location', variant: 'destructive' });
@@ -104,12 +154,22 @@ export default function Settings() {
     },
     onSuccess: () => {
       toast({ title: 'Google Business disconnected' });
+      setSelectedAccount("");
+      setSelectedLocation(null);
       queryClient.invalidateQueries({ queryKey: ['google-status'] });
     },
     onError: () => {
       toast({ title: 'Failed to disconnect', variant: 'destructive' });
     },
   });
+
+  const formatAddress = (loc: GoogleLocation) => {
+    if (!loc.storefrontAddress) return 'No address';
+    return [
+      ...(loc.storefrontAddress.addressLines || []),
+      loc.storefrontAddress.locality,
+    ].filter(Boolean).join(', ');
+  };
 
   return (
     <DashboardLayout>
@@ -190,75 +250,127 @@ export default function Settings() {
             ) : googleStatus?.connected && !googleStatus.business ? (
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <Badge variant="default" className="bg-yellow-500">Enter Business Details</Badge>
+                  <Badge variant="default" className="bg-yellow-500">Select Your Business</Badge>
                 </div>
                 
                 <p className="text-sm text-muted-foreground">
-                  Google account connected! Enter your business Place ID to generate review links.
+                  Google account connected! Now select your business location to generate review links.
                 </p>
 
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
-                  <p className="text-sm font-medium text-blue-800">How to find your Place ID:</p>
-                  <ol className="text-sm text-blue-700 list-decimal list-inside space-y-1">
-                    <li>Go to <a href="https://developers.google.com/maps/documentation/places/web-service/place-id" target="_blank" rel="noopener noreferrer" className="underline">Google Place ID Finder</a></li>
-                    <li>Search for your business name "BeePromoted"</li>
-                    <li>Click on your business in the results</li>
-                    <li>Copy the Place ID (starts with "ChIJ...")</li>
-                  </ol>
-                </div>
-
-                <div className="space-y-4 pt-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="businessName">Business Name</Label>
-                    <Input 
-                      id="businessName"
-                      placeholder="e.g., BeePromoted"
-                      value={manualTitle}
-                      onChange={(e) => setManualTitle(e.target.value)}
-                      data-testid="input-business-name"
-                    />
+                {accountsLoading ? (
+                  <div className="flex items-center gap-2 py-4">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-sm text-muted-foreground">Loading your business accounts...</span>
                   </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="placeId">Google Place ID</Label>
-                    <Input 
-                      id="placeId"
-                      placeholder="e.g., ChIJN1t_tDeuEmsRUsoyG83frY4"
-                      value={manualPlaceId}
-                      onChange={(e) => setManualPlaceId(e.target.value)}
-                      data-testid="input-place-id"
-                    />
+                ) : accountsError ? (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
+                    <p className="text-sm text-red-800">
+                      {(accountsError as Error).message.includes('Quota exceeded') 
+                        ? 'Rate limit reached. Please wait a moment and try again.'
+                        : (accountsError as Error).message.includes('API has not been used')
+                        ? 'The Google My Business API needs to be enabled. Please enable it in Google Cloud Console and try again.'
+                        : (accountsError as Error).message}
+                    </p>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => refetchAccounts()}
+                      data-testid="button-retry-accounts"
+                    >
+                      Try Again
+                    </Button>
                   </div>
+                ) : accounts?.accounts && accounts.accounts.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Select Business Account</label>
+                      <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+                        <SelectTrigger data-testid="select-google-account">
+                          <SelectValue placeholder="Choose an account..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {accounts.accounts.map((account) => (
+                            <SelectItem key={account.name} value={account.name}>
+                              <div className="flex items-center gap-2">
+                                <Building2 className="h-4 w-4" />
+                                {account.accountName || account.name}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                  <Button 
-                    onClick={() => saveLocationMutation.mutate({ placeId: manualPlaceId, title: manualTitle })}
-                    disabled={saveLocationMutation.isPending || !manualPlaceId || !manualTitle}
-                    data-testid="button-save-location"
-                  >
-                    {saveLocationMutation.isPending ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <MapPin className="mr-2 h-4 w-4" />
+                    {selectedAccount && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Select Location</label>
+                        {locationsLoading ? (
+                          <div className="flex items-center gap-2 py-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span className="text-sm text-muted-foreground">Loading locations...</span>
+                          </div>
+                        ) : locations?.locations && locations.locations.length > 0 ? (
+                          <div className="space-y-2">
+                            {locations.locations.map((loc) => (
+                              <div
+                                key={loc.name}
+                                className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                                  selectedLocation?.name === loc.name 
+                                    ? 'border-primary bg-primary/5' 
+                                    : 'hover:bg-muted/50'
+                                }`}
+                                onClick={() => setSelectedLocation(loc)}
+                                data-testid={`location-${loc.name}`}
+                              >
+                                <p className="font-medium">{loc.title}</p>
+                                <p className="text-sm text-muted-foreground">{formatAddress(loc)}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground py-2">
+                            No locations found for this account.
+                          </p>
+                        )}
+                      </div>
                     )}
-                    Save Business
-                  </Button>
-                </div>
 
-                <div className="pt-4 border-t">
-                  <Button 
-                    variant="outline" 
-                    onClick={() => disconnectMutation.mutate()}
-                    disabled={disconnectMutation.isPending}
-                    data-testid="button-disconnect-google"
-                  >
-                    {disconnectMutation.isPending ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Unlink className="mr-2 h-4 w-4" />
+                    {selectedLocation && (
+                      <Button 
+                        onClick={() => saveLocationMutation.mutate(selectedLocation)}
+                        disabled={saveLocationMutation.isPending}
+                        data-testid="button-save-location"
+                      >
+                        {saveLocationMutation.isPending ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <MapPin className="mr-2 h-4 w-4" />
+                        )}
+                        Use This Location
+                      </Button>
                     )}
-                    Disconnect & Try Different Account
-                  </Button>
-                </div>
+                  </div>
+                ) : (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <p className="text-sm text-yellow-800">
+                      No Google Business accounts found. Make sure your Google account has access to a Google Business Profile.
+                    </p>
+                  </div>
+                )}
+
+                <Button 
+                  variant="outline" 
+                  onClick={() => disconnectMutation.mutate()}
+                  disabled={disconnectMutation.isPending}
+                  data-testid="button-disconnect-google"
+                >
+                  {disconnectMutation.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Unlink className="mr-2 h-4 w-4" />
+                  )}
+                  Disconnect & Try Different Account
+                </Button>
               </div>
             ) : (
               <div className="space-y-4">
@@ -275,86 +387,18 @@ export default function Settings() {
                   <li>Generate review request links for campaigns</li>
                 </ul>
 
-                {!showManualEntry ? (
-                  <div className="space-y-3">
-                    <Button 
-                      onClick={() => connectMutation.mutate()}
-                      disabled={connectMutation.isPending}
-                      data-testid="button-connect-google"
-                    >
-                      {connectMutation.isPending ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Link2 className="mr-2 h-4 w-4" />
-                      )}
-                      Connect Google Business
-                    </Button>
-                    
-                    <div className="text-center">
-                      <button 
-                        onClick={() => setShowManualEntry(true)}
-                        className="text-sm text-muted-foreground hover:text-primary underline"
-                      >
-                        Or enter Place ID manually
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
-                      <p className="text-sm font-medium text-blue-800">How to find your Place ID:</p>
-                      <ol className="text-sm text-blue-700 list-decimal list-inside space-y-1">
-                        <li>Go to <a href="https://developers.google.com/maps/documentation/places/web-service/place-id" target="_blank" rel="noopener noreferrer" className="underline">Google Place ID Finder</a></li>
-                        <li>Search for your business name</li>
-                        <li>Click on your business in the results</li>
-                        <li>Copy the Place ID</li>
-                      </ol>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="businessNameManual">Business Name</Label>
-                      <Input 
-                        id="businessNameManual"
-                        placeholder="e.g., BeePromoted"
-                        value={manualTitle}
-                        onChange={(e) => setManualTitle(e.target.value)}
-                        data-testid="input-business-name-manual"
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="placeIdManual">Google Place ID</Label>
-                      <Input 
-                        id="placeIdManual"
-                        placeholder="e.g., ChIJN1t_tDeuEmsRUsoyG83frY4"
-                        value={manualPlaceId}
-                        onChange={(e) => setManualPlaceId(e.target.value)}
-                        data-testid="input-place-id-manual"
-                      />
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button 
-                        onClick={() => saveLocationMutation.mutate({ placeId: manualPlaceId, title: manualTitle })}
-                        disabled={saveLocationMutation.isPending || !manualPlaceId || !manualTitle}
-                        data-testid="button-save-location-manual"
-                      >
-                        {saveLocationMutation.isPending ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <MapPin className="mr-2 h-4 w-4" />
-                        )}
-                        Save Business
-                      </Button>
-                      <Button 
-                        variant="outline"
-                        onClick={() => setShowManualEntry(false)}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                )}
+                <Button 
+                  onClick={() => connectMutation.mutate()}
+                  disabled={connectMutation.isPending}
+                  data-testid="button-connect-google"
+                >
+                  {connectMutation.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Link2 className="mr-2 h-4 w-4" />
+                  )}
+                  Connect Google Business
+                </Button>
               </div>
             )}
           </CardContent>
