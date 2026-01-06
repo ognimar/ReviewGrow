@@ -2,6 +2,7 @@ import express, { type Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
 import cors from "cors";
+import { FieldValue } from "firebase-admin/firestore";
 import { getFirestore, getStorage, initializeFirebase, isAdmin } from "./firebase";
 import { authenticate, requireAdmin, type AuthRequest } from "./middleware/auth";
 import { parseCSV } from "./services/csvService";
@@ -878,8 +879,6 @@ export async function registerRoutes(
         return res.status(503).json({ error: 'Database not available' });
       }
 
-      const { FieldValue } = require('firebase-admin/firestore');
-      
       await db.collection('users').doc(req.user!.uid).update({
         googleTokens: FieldValue.delete(),
         googleBusiness: FieldValue.delete(),
