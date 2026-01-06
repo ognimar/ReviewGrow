@@ -262,29 +262,29 @@ export default function Campaigns() {
                           const firstClient = clients[0];
                           if (!template) return null;
                           return (
-                            <div className="relative bg-muted/50 rounded-lg p-2">
-                              <img 
-                                src={template.imageUrl} 
-                                alt={template.name}
-                                className="w-full h-40 object-contain rounded"
-                              />
-                              {firstClient && (
-                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                  <span 
+                            <div className="bg-muted/50 rounded-lg p-2">
+                              <div className="relative inline-block w-full">
+                                <img 
+                                  src={template.imageUrl} 
+                                  alt={template.name}
+                                  className="w-full h-auto rounded"
+                                />
+                                {firstClient && (
+                                  <div 
+                                    className="absolute font-bold pointer-events-none"
                                     style={{ 
-                                      position: 'absolute',
-                                      top: `${(template.textY / 600) * 100}%`,
-                                      left: `${(template.textX / 800) * 100}%`,
+                                      left: `${template.textX}%`,
+                                      top: `${template.textY}%`,
+                                      transform: 'translate(-50%, -50%)',
                                       color: template.fontColor,
-                                      fontSize: `${Math.max(12, template.fontSize * 0.3)}px`,
-                                      fontWeight: 'bold',
+                                      fontSize: `${Math.max(10, template.fontSize * 0.15)}px`,
                                       textShadow: '1px 1px 2px rgba(0,0,0,0.5)',
                                     }}
                                   >
                                     {firstClient.name}
-                                  </span>
-                                </div>
-                              )}
+                                  </div>
+                                )}
+                              </div>
                               <p className="text-xs text-center text-muted-foreground mt-2">
                                 Przykład dla: {firstClient?.name || 'Pierwszy kontakt'}
                               </p>
