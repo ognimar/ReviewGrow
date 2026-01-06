@@ -6,6 +6,7 @@ import { getFirestore, getStorage, initializeFirebase, isAdmin } from "./firebas
 import { authenticate, requireAdmin, type AuthRequest } from "./middleware/auth";
 import { parseCSV } from "./services/csvService";
 import { generatePersonalizedImages } from "./services/imageService";
+import { sendSMS } from "./services/smsService";
 import Stripe from "stripe";
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -312,17 +313,28 @@ export async function registerRoutes(
       
       let sentCount = 0;
       let failedCount = 0;
+      const errors: string[] = [];
 
       for (const client of clients) {
         const personalizedMessage = campaign.message.replace(/\{\{name\}\}/g, client.name || 'Customer');
         
         if (campaign.type === 'sms' && client.phone) {
-          sentCount++;
+          const result = await sendSMS(client.phone, personalizedMessage);
+          if (result.success) {
+            sentCount++;
+          } else {
+            failedCount++;
+            errors.push(`${client.name}: ${result.error}`);
+          }
         } else if (campaign.type === 'email' && client.email) {
           sentCount++;
         } else {
           failedCount++;
         }
+      }
+
+      if (errors.length > 0) {
+        console.log('SMS errors:', errors);
       }
 
       await campaignRef.update({
