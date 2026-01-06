@@ -24,9 +24,14 @@ export function parseCSV(csvContent: string): ValidationResult {
   result.data.forEach((row, index) => {
     const rowNum = index + 2;
     
-    const name = row.name || row.Name || row.imię || row.Imię || '';
-    const phone = row.phone || row.Phone || row.telefon || row.Telefon || '';
-    const email = row.email || row.Email || '';
+    const firstName = row['First Name'] || row['first name'] || row.firstName || row.first_name || '';
+    const lastName = row['Last Name'] || row['last name'] || row.lastName || row.last_name || '';
+    const fullName = row.name || row.Name || row.imię || row.Imię || row['Full Name'] || row['full name'] || '';
+    const name = fullName || `${firstName} ${lastName}`.trim();
+    
+    const phone = row.phone || row.Phone || row.telefon || row.Telefon || 
+                  row['Phone Number'] || row['phone number'] || row.phoneNumber || row.mobile || row.Mobile || '';
+    const email = row.email || row.Email || row['Email Address'] || row['email address'] || '';
 
     if (!name.trim()) {
       errors.push({ row: rowNum, reason: 'Missing name' });
@@ -41,15 +46,20 @@ export function parseCSV(csvContent: string): ValidationResult {
     let validatedPhone = '';
     if (phone.trim()) {
       try {
-        if (!isValidPhoneNumber(phone, 'PL')) {
-          errors.push({ row: rowNum, reason: `Invalid phone number: ${phone}` });
-          return;
+        if (isValidPhoneNumber(phone, 'PL')) {
+          const parsed = parsePhoneNumber(phone, 'PL');
+          validatedPhone = parsed.formatInternational();
+        } else if (isValidPhoneNumber(phone, 'US')) {
+          const parsed = parsePhoneNumber(phone, 'US');
+          validatedPhone = parsed.formatInternational();
+        } else if (isValidPhoneNumber(phone)) {
+          const parsed = parsePhoneNumber(phone);
+          validatedPhone = parsed!.formatInternational();
+        } else {
+          validatedPhone = phone.trim();
         }
-        const parsed = parsePhoneNumber(phone, 'PL');
-        validatedPhone = parsed.formatInternational();
       } catch (error) {
-        errors.push({ row: rowNum, reason: `Phone parsing error: ${phone}` });
-        return;
+        validatedPhone = phone.trim();
       }
     }
 
