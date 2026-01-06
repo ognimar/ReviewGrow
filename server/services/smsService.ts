@@ -1,4 +1,4 @@
-const SMSAPI_URL = 'https://api.smsapi.com/sms.do';
+const SMSAPI_URL = 'https://api.smsapi.pl/sms.do';
 
 interface SendSMSResult {
   success: boolean;
