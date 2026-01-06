@@ -2,12 +2,13 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Link2, Unlink, MapPin, Star, ExternalLink } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, Link2, Unlink, MapPin, Star, ExternalLink, Building2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 interface GoogleStatus {
   connected: boolean;
@@ -20,15 +21,37 @@ interface GoogleStatus {
   } | null;
 }
 
+interface GoogleAccount {
+  name: string;
+  accountName: string;
+  type: string;
+}
+
+interface GoogleLocation {
+  name: string;
+  title: string;
+  storefrontAddress?: {
+    addressLines?: string[];
+    locality?: string;
+    postalCode?: string;
+  };
+  metadata?: {
+    placeId?: string;
+  };
+}
+
 export default function Settings() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [location] = useLocation();
+  const [selectedAccount, setSelectedAccount] = useState<string>("");
+  const [selectedLocation, setSelectedLocation] = useState<GoogleLocation | null>(null);
 
   useEffect(() => {
     if (location.includes('connected=google')) {
-      toast({ title: 'Google Business connected successfully!' });
+      toast({ title: 'Google account connected! Now select your business location.' });
+      queryClient.invalidateQueries({ queryKey: ['google-status'] });
     }
   }, [location]);
 
@@ -41,6 +64,30 @@ export default function Settings() {
       if (!response.ok) throw new Error('Failed to fetch status');
       return response.json();
     },
+  });
+
+  const { data: accounts, isLoading: accountsLoading } = useQuery<{ accounts: GoogleAccount[] }>({
+    queryKey: ['google-accounts'],
+    queryFn: async () => {
+      const response = await fetch('/api/google/accounts', {
+        headers: { 'Authorization': `Bearer ${await user?.getIdToken()}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch accounts');
+      return response.json();
+    },
+    enabled: googleStatus?.connected === true && !googleStatus?.business,
+  });
+
+  const { data: locations, isLoading: locationsLoading } = useQuery<{ locations: GoogleLocation[] }>({
+    queryKey: ['google-locations', selectedAccount],
+    queryFn: async () => {
+      const response = await fetch(`/api/google/locations/${encodeURIComponent(selectedAccount)}`, {
+        headers: { 'Authorization': `Bearer ${await user?.getIdToken()}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch locations');
+      return response.json();
+    },
+    enabled: !!selectedAccount,
   });
 
   const connectMutation = useMutation({
@@ -57,6 +104,41 @@ export default function Settings() {
     },
   });
 
+  const saveLocationMutation = useMutation({
+    mutationFn: async (loc: GoogleLocation) => {
+      const address = loc.storefrontAddress 
+        ? [
+            ...(loc.storefrontAddress.addressLines || []),
+            loc.storefrontAddress.locality,
+            loc.storefrontAddress.postalCode
+          ].filter(Boolean).join(', ')
+        : 'Address not available';
+
+      const response = await fetch('/api/google/location', {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${await user?.getIdToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          locationName: loc.name,
+          placeId: loc.metadata?.placeId || '',
+          title: loc.title,
+          address,
+        }),
+      });
+      if (!response.ok) throw new Error('Failed to save location');
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Business location saved!' });
+      queryClient.invalidateQueries({ queryKey: ['google-status'] });
+    },
+    onError: () => {
+      toast({ title: 'Failed to save location', variant: 'destructive' });
+    },
+  });
+
   const disconnectMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch('/api/google/disconnect', {
@@ -68,12 +150,22 @@ export default function Settings() {
     },
     onSuccess: () => {
       toast({ title: 'Google Business disconnected' });
+      setSelectedAccount("");
+      setSelectedLocation(null);
       queryClient.invalidateQueries({ queryKey: ['google-status'] });
     },
     onError: () => {
       toast({ title: 'Failed to disconnect', variant: 'destructive' });
     },
   });
+
+  const formatAddress = (loc: GoogleLocation) => {
+    if (!loc.storefrontAddress) return 'No address';
+    return [
+      ...(loc.storefrontAddress.addressLines || []),
+      loc.storefrontAddress.locality,
+    ].filter(Boolean).join(', ');
+  };
 
   return (
     <DashboardLayout>
@@ -149,6 +241,113 @@ export default function Settings() {
                     <Unlink className="mr-2 h-4 w-4" />
                   )}
                   Disconnect
+                </Button>
+              </div>
+            ) : googleStatus?.connected && !googleStatus.business ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Badge variant="default" className="bg-yellow-500">Select Your Business</Badge>
+                </div>
+                
+                <p className="text-sm text-muted-foreground">
+                  Google account connected! Now select your business location to generate review links.
+                </p>
+
+                {accountsLoading ? (
+                  <div className="flex items-center gap-2 py-4">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-sm text-muted-foreground">Loading your business accounts...</span>
+                  </div>
+                ) : accounts?.accounts && accounts.accounts.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Select Business Account</label>
+                      <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+                        <SelectTrigger data-testid="select-google-account">
+                          <SelectValue placeholder="Choose an account..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {accounts.accounts.map((account) => (
+                            <SelectItem key={account.name} value={account.name}>
+                              <div className="flex items-center gap-2">
+                                <Building2 className="h-4 w-4" />
+                                {account.accountName || account.name}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {selectedAccount && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Select Location</label>
+                        {locationsLoading ? (
+                          <div className="flex items-center gap-2 py-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span className="text-sm text-muted-foreground">Loading locations...</span>
+                          </div>
+                        ) : locations?.locations && locations.locations.length > 0 ? (
+                          <div className="space-y-2">
+                            {locations.locations.map((loc) => (
+                              <div
+                                key={loc.name}
+                                className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                                  selectedLocation?.name === loc.name 
+                                    ? 'border-primary bg-primary/5' 
+                                    : 'hover:bg-muted/50'
+                                }`}
+                                onClick={() => setSelectedLocation(loc)}
+                                data-testid={`location-${loc.name}`}
+                              >
+                                <p className="font-medium">{loc.title}</p>
+                                <p className="text-sm text-muted-foreground">{formatAddress(loc)}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground py-2">
+                            No locations found for this account.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {selectedLocation && (
+                      <Button 
+                        onClick={() => saveLocationMutation.mutate(selectedLocation)}
+                        disabled={saveLocationMutation.isPending}
+                        data-testid="button-save-location"
+                      >
+                        {saveLocationMutation.isPending ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <MapPin className="mr-2 h-4 w-4" />
+                        )}
+                        Use This Location
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <p className="text-sm text-yellow-800">
+                      No Google Business accounts found. Make sure your Google account has access to a Google Business Profile.
+                    </p>
+                  </div>
+                )}
+
+                <Button 
+                  variant="outline" 
+                  onClick={() => disconnectMutation.mutate()}
+                  disabled={disconnectMutation.isPending}
+                  data-testid="button-disconnect-google"
+                >
+                  {disconnectMutation.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Unlink className="mr-2 h-4 w-4" />
+                  )}
+                  Disconnect & Try Different Account
                 </Button>
               </div>
             ) : (
