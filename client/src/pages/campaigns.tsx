@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Mail, MessageSquare, Loader2, Megaphone, Send, Eye, CheckCircle } from "lucide-react";
+import { Plus, Mail, MessageSquare, Loader2, Megaphone, Send, Eye, CheckCircle, Image } from "lucide-react";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchCampaigns, fetchClients, fetchTemplates, createCampaign } from "@/lib/api";
@@ -38,6 +38,11 @@ interface Client {
 interface Template {
   id: string;
   name: string;
+  imageUrl: string;
+  textX: number;
+  textY: number;
+  fontSize: number;
+  fontColor: string;
 }
 
 export default function Campaigns() {
@@ -231,12 +236,16 @@ export default function Campaigns() {
 
                 {templates.length > 0 && (
                   <div className="space-y-2">
-                    <Label>Template (Optional)</Label>
+                    <Label className="flex items-center gap-2">
+                      <Image className="h-4 w-4" />
+                      Wybierz szablon graficzny (Opcjonalne)
+                    </Label>
                     <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
                       <SelectTrigger data-testid="select-template">
-                        <SelectValue placeholder="Select a template..." />
+                        <SelectValue placeholder="Wybierz szablon..." />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="">Brak szablonu</SelectItem>
                         {templates.map((template) => (
                           <SelectItem key={template.id} value={template.id}>
                             {template.name}
@@ -244,23 +253,67 @@ export default function Campaigns() {
                         ))}
                       </SelectContent>
                     </Select>
+                    
+                    {selectedTemplate && (
+                      <div className="mt-3 space-y-2">
+                        <p className="text-xs text-muted-foreground font-medium">Podgląd szablonu:</p>
+                        {(() => {
+                          const template = templates.find(t => t.id === selectedTemplate);
+                          const firstClient = clients[0];
+                          if (!template) return null;
+                          return (
+                            <div className="relative bg-muted/50 rounded-lg p-2">
+                              <img 
+                                src={template.imageUrl} 
+                                alt={template.name}
+                                className="w-full h-40 object-contain rounded"
+                              />
+                              {firstClient && (
+                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                  <span 
+                                    style={{ 
+                                      position: 'absolute',
+                                      top: `${(template.textY / 600) * 100}%`,
+                                      left: `${(template.textX / 800) * 100}%`,
+                                      color: template.fontColor,
+                                      fontSize: `${Math.max(12, template.fontSize * 0.3)}px`,
+                                      fontWeight: 'bold',
+                                      textShadow: '1px 1px 2px rgba(0,0,0,0.5)',
+                                    }}
+                                  >
+                                    {firstClient.name}
+                                  </span>
+                                </div>
+                              )}
+                              <p className="text-xs text-center text-muted-foreground mt-2">
+                                Przykład dla: {firstClient?.name || 'Pierwszy kontakt'}
+                              </p>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                 )}
 
                 <div className="space-y-2">
-                  <Label>Message</Label>
+                  <Label>Treść wiadomości</Label>
                   <Textarea 
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     placeholder={campaignType === 'sms' 
-                      ? "Hi {{name}}, check out our new offer!" 
-                      : "Dear {{name}},\n\nWe have exciting news for you..."}
+                      ? "Cześć {{name}}, sprawdź naszą ofertę! {{google_link}}" 
+                      : "Drogi {{name}},\n\nMamy dla Ciebie świetną wiadomość..."}
                     rows={4}
                     data-testid="input-message"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Use {"{{name}}"} to personalize with client's name
-                  </p>
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p><code className="bg-muted px-1 rounded">{"{{name}}"}</code> - imię klienta</p>
+                    <p><code className="bg-muted px-1 rounded">{"{{google_link}}"}</code> - link do opinii Google</p>
+                    {selectedTemplate && (
+                      <p><code className="bg-muted px-1 rounded">{"{{image}}"}</code> - spersonalizowane zdjęcie</p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="bg-muted/50 rounded-lg p-3">

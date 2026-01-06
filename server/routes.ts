@@ -10,6 +10,7 @@ import { generatePersonalizedImages } from "./services/imageService";
 import { sendSMS } from "./services/smsService";
 import { generateAuthUrl, exchangeCodeForTokens, getAccounts, getLocations, getReviews, generateReviewLink, refreshAccessToken, replyToReview } from "./services/googleBusinessService";
 import { generateAIReply } from "./services/aiReplyService";
+import { personalizeImageFromUrl, uploadToFirebaseStorage } from "./services/imageService";
 import Stripe from "stripe";
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -325,10 +326,52 @@ export async function registerRoutes(
       const userData = userDoc.data();
       const googleReviewLink = userData?.googleBusiness?.reviewLink || '';
 
+      // Get template settings if templateId is set
+      let template: any = null;
+      if (campaign.templateId) {
+        const templateDoc = await db.collection('templates').doc(campaign.templateId).get();
+        if (templateDoc.exists) {
+          template = templateDoc.data();
+        }
+      }
+
+      // Pre-generate personalized images if template is selected and message contains {{image}}
+      const clientImageUrls: Map<string, string> = new Map();
+      if (template && campaign.message.includes('{{image}}')) {
+        console.log(`Generating personalized images for ${clients.length} clients...`);
+        for (const client of clients) {
+          try {
+            const imageBuffer = await personalizeImageFromUrl(
+              template.imageUrl,
+              client.name || 'Customer',
+              {
+                x: parseInt(template.textX) || 50,
+                y: parseInt(template.textY) || 100,
+                fontSize: parseInt(template.fontSize) || 48,
+                fontColor: template.fontColor || '#ffffff',
+              }
+            );
+            const imageUrl = await uploadToFirebaseStorage(
+              imageBuffer,
+              req.user!.uid,
+              `campaign_${campaign.name}_${client.name?.replace(/\s+/g, '_') || 'client'}.jpg`
+            );
+            clientImageUrls.set(client.id, imageUrl);
+          } catch (e: any) {
+            console.error(`Failed to generate image for ${client.name}:`, e.message);
+          }
+        }
+        console.log(`Generated ${clientImageUrls.size} personalized images`);
+      }
+
       for (const client of clients) {
         let personalizedMessage = campaign.message
           .replace(/\{\{name\}\}/g, client.name || 'Customer')
           .replace(/\{\{google_link\}\}/g, googleReviewLink);
+        
+        // Replace {{image}} with the personalized image URL
+        const imageUrl = clientImageUrls.get(client.id) || '';
+        personalizedMessage = personalizedMessage.replace(/\{\{image\}\}/g, imageUrl);
         
         if (campaign.type === 'sms' && client.phone) {
           const result = await sendSMS(client.phone, personalizedMessage);

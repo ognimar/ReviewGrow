@@ -78,6 +78,12 @@ SENDGRID_API_KEY=your-sendgrid-key
 Run `npm run dev` to start the development server on port 5000.
 
 ## Recent Changes
+- 2026-01-06: Integrated campaign templates with personalized image generation
+  - Campaign form now includes template dropdown for selecting image templates
+  - Live preview showing template with first contact's name overlay
+  - {{image}} tag support in SMS/Email messages for personalized images
+  - Personalized images generated using Sharp and uploaded to Firebase Storage
+  - Template ID saved in campaign for tracking which template was used
 - 2026-01-06: Implemented AI auto-reply for Google reviews (4-5 stars)
   - Created aiReplyService.ts using OpenAI via Replit AI Integrations
   - Added auto-reply settings (toggle, min stars, custom instructions) 
