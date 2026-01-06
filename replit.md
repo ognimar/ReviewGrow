@@ -33,6 +33,12 @@ OMNISEND_ADMIN_EMAILS=admin1@example.com,admin2@example.com
 OMNISEND_STRIPE_SECRET_KEY=sk_live_...
 ```
 
+### Google Business Profile (OAuth)
+```
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+```
+
 ### Optional: SMS/Email APIs
 ```
 SMSAPI_TOKEN=your-smsapi-token
@@ -44,7 +50,8 @@ SENDGRID_API_KEY=your-sendgrid-key
 ### User Features
 - **Client Management**: Import CSV lists with Name, Phone, Email
 - **Image Templates**: Create personalized images with dynamic text overlays
-- **Campaigns**: Send SMS/MMS and Email campaigns
+- **Campaigns**: Send SMS/MMS and Email campaigns with {{name}} and {{google_link}} tags
+- **Google Business Integration**: Connect Google Business Profile to collect reviews
 - **Usage Tracking**: Real-time SMS and Email quota display
 - **Billing**: Monthly (99 PLN/mo) or Annual (960 PLN/year) plans
 
@@ -71,6 +78,10 @@ SENDGRID_API_KEY=your-sendgrid-key
 Run `npm run dev` to start the development server on port 5000.
 
 ## Recent Changes
+- 2026-01-06: Added Google Business Profile OAuth integration with business.manage scope
+- 2026-01-06: Created Settings page for Google Business connection management
+- 2026-01-06: Added {{google_link}} template tag for review request campaigns
+- 2026-01-06: Dashboard widget showing Google Business connection status
 - 2026-01-05: Initial backend implementation with Firebase, Stripe, and image personalization
 - Implemented CSV import with phone validation
 - Added usage tracker in sidebar
