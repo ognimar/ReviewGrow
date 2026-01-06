@@ -132,6 +132,68 @@ export async function registerRoutes(
     }
   });
 
+  // Update Client
+  app.patch("/api/clients/:id", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const { name, phone, email } = req.body;
+      
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const clientRef = db.collection('clients').doc(req.params.id);
+      const clientDoc = await clientRef.get();
+
+      if (!clientDoc.exists) {
+        return res.status(404).json({ error: 'Client not found' });
+      }
+
+      if (clientDoc.data()?.ownerId !== req.user!.uid) {
+        return res.status(403).json({ error: 'Not authorized' });
+      }
+
+      const updates: Record<string, string> = {};
+      if (name !== undefined) updates.name = name.trim();
+      if (phone !== undefined) updates.phone = phone.trim();
+      if (email !== undefined) updates.email = email.trim().toLowerCase();
+
+      await clientRef.update(updates);
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Update client error:', error);
+      res.status(500).json({ error: 'Failed to update client' });
+    }
+  });
+
+  // Delete Client
+  app.delete("/api/clients/:id", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const clientRef = db.collection('clients').doc(req.params.id);
+      const clientDoc = await clientRef.get();
+
+      if (!clientDoc.exists) {
+        return res.status(404).json({ error: 'Client not found' });
+      }
+
+      if (clientDoc.data()?.ownerId !== req.user!.uid) {
+        return res.status(403).json({ error: 'Not authorized' });
+      }
+
+      await clientRef.delete();
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Delete client error:', error);
+      res.status(500).json({ error: 'Failed to delete client' });
+    }
+  });
+
   // Get Clients
   app.get("/api/clients", authenticate, async (req: AuthRequest, res) => {
     try {

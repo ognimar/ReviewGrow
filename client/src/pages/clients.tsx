@@ -2,13 +2,15 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Upload, FileDown, Search, Loader2, Users } from "lucide-react";
+import { Upload, FileDown, Search, Loader2, Users, Pencil, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchClients, importClientsCSV } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
 
 interface Client {
@@ -21,10 +23,15 @@ interface Client {
 
 export default function Clients() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editEmail, setEditEmail] = useState("");
 
   const { data: clients = [], isLoading } = useQuery<Client[]>({
     queryKey: ['clients'],
@@ -50,10 +57,80 @@ export default function Clients() {
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, name, phone, email }: { id: string; name: string; phone: string; email: string }) => {
+      const response = await fetch(`/api/clients/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await user?.getIdToken()}`
+        },
+        body: JSON.stringify({ name, phone, email }),
+      });
+      if (!response.ok) throw new Error('Failed to update client');
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Client updated successfully' });
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      setEditingClient(null);
+    },
+    onError: () => {
+      toast({ title: 'Failed to update client', variant: 'destructive' });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(`/api/clients/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${await user?.getIdToken()}`
+        },
+      });
+      if (!response.ok) throw new Error('Failed to delete client');
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Client deleted' });
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+    },
+    onError: () => {
+      toast({ title: 'Failed to delete client', variant: 'destructive' });
+    },
+  });
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       importMutation.mutate(file);
+    }
+  };
+
+  const handleEditClient = (client: Client) => {
+    setEditingClient(client);
+    setEditName(client.name);
+    setEditPhone(client.phone || '');
+    setEditEmail(client.email || '');
+  };
+
+  const handleSaveClient = () => {
+    if (!editingClient) return;
+    if (!editName.trim()) {
+      toast({ title: 'Name is required', variant: 'destructive' });
+      return;
+    }
+    updateMutation.mutate({
+      id: editingClient.id,
+      name: editName,
+      phone: editPhone,
+      email: editEmail,
+    });
+  };
+
+  const handleDeleteClient = (id: string) => {
+    if (confirm('Are you sure you want to delete this client?')) {
+      deleteMutation.mutate(id);
     }
   };
 
@@ -160,16 +237,38 @@ export default function Clients() {
                     <TableHead>Phone</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Added</TableHead>
+                    <TableHead className="w-24">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredClients.map((client) => (
                     <TableRow key={client.id} data-testid={`row-client-${client.id}`}>
                       <TableCell className="font-medium">{client.name}</TableCell>
-                      <TableCell>{client.phone}</TableCell>
+                      <TableCell>{client.phone || '-'}</TableCell>
                       <TableCell>{client.email || '-'}</TableCell>
                       <TableCell>
                         {client.createdAt ? format(new Date(client.createdAt), 'MMM d, yyyy') : '-'}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => handleEditClient(client)}
+                            data-testid={`button-edit-${client.id}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => handleDeleteClient(client.id)}
+                            data-testid={`button-delete-${client.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -179,6 +278,59 @@ export default function Clients() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={!!editingClient} onOpenChange={(open) => !open && setEditingClient(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Client</DialogTitle>
+            <DialogDescription>
+              Update client information
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Client name"
+                data-testid="input-edit-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-phone">Phone</Label>
+              <Input
+                id="edit-phone"
+                value={editPhone}
+                onChange={(e) => setEditPhone(e.target.value)}
+                placeholder="+1 555 123 4567"
+                data-testid="input-edit-phone"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">Email</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                placeholder="email@example.com"
+                data-testid="input-edit-email"
+              />
+            </div>
+            <Button 
+              className="w-full" 
+              onClick={handleSaveClient}
+              disabled={updateMutation.isPending}
+              data-testid="button-save-client"
+            >
+              {updateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }
