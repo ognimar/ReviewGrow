@@ -354,9 +354,19 @@ export default function Campaigns() {
                     </Button>
                   )}
                   {campaign.status === 'sent' && (
-                    <Button variant="outline" className="flex-1" disabled>
-                      <CheckCircle className="mr-2 h-4 w-4 text-green-500" />
-                      Sent
+                    <Button 
+                      variant="secondary" 
+                      className="flex-1"
+                      onClick={() => handleSendCampaign(campaign.id)}
+                      disabled={sendMutation.isPending}
+                      data-testid={`button-resend-campaign-${campaign.id}`}
+                    >
+                      {sendMutation.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="mr-2 h-4 w-4" />
+                      )}
+                      Resend
                     </Button>
                   )}
                   <Button 

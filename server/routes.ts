@@ -299,9 +299,7 @@ export async function registerRoutes(
         return res.status(403).json({ error: 'Not authorized' });
       }
 
-      if (campaign.status !== 'draft') {
-        return res.status(400).json({ error: 'Campaign already sent' });
-      }
+      // Allow resending campaigns
 
       const clientsSnapshot = await db.collection('clients')
         .where('ownerId', '==', req.user!.uid)
