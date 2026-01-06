@@ -277,7 +277,7 @@ export default function Campaigns() {
                                       top: `${template.textY}%`,
                                       transform: 'translate(-50%, -50%)',
                                       color: template.fontColor,
-                                      fontSize: `${Math.max(10, template.fontSize * 0.15)}px`,
+                                      fontSize: `${Math.min(template.fontSize, 32)}px`,
                                       textShadow: '1px 1px 2px rgba(0,0,0,0.5)',
                                     }}
                                   >
