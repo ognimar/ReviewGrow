@@ -54,7 +54,7 @@ export default function Campaigns() {
   const [campaignName, setCampaignName] = useState("");
   const [campaignType, setCampaignType] = useState<string>("");
   const [message, setMessage] = useState("");
-  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("none");
 
   const { data: campaigns = [], isLoading } = useQuery<Campaign[]>({
     queryKey: ['campaigns'],
@@ -159,7 +159,7 @@ export default function Campaigns() {
       name: campaignName,
       type: campaignType,
       message,
-      templateId: selectedTemplate || null,
+      templateId: selectedTemplate && selectedTemplate !== "none" ? selectedTemplate : null,
       scheduled: null,
     });
   };
@@ -245,7 +245,7 @@ export default function Campaigns() {
                         <SelectValue placeholder="Wybierz szablon..." />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Brak szablonu</SelectItem>
+                        <SelectItem value="none">Brak szablonu</SelectItem>
                         {templates.map((template) => (
                           <SelectItem key={template.id} value={template.id}>
                             {template.name}
@@ -254,7 +254,7 @@ export default function Campaigns() {
                       </SelectContent>
                     </Select>
                     
-                    {selectedTemplate && (
+                    {selectedTemplate && selectedTemplate !== "none" && (
                       <div className="mt-3 space-y-2">
                         <p className="text-xs text-muted-foreground font-medium">Podgląd szablonu:</p>
                         {(() => {
@@ -310,7 +310,7 @@ export default function Campaigns() {
                   <div className="text-xs text-muted-foreground space-y-1">
                     <p><code className="bg-muted px-1 rounded">{"{{name}}"}</code> - imię klienta</p>
                     <p><code className="bg-muted px-1 rounded">{"{{google_link}}"}</code> - link do opinii Google</p>
-                    {selectedTemplate && (
+                    {selectedTemplate && selectedTemplate !== "none" && (
                       <p><code className="bg-muted px-1 rounded">{"{{image}}"}</code> - spersonalizowane zdjęcie</p>
                     )}
                   </div>
