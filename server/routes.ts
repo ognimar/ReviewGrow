@@ -286,6 +286,33 @@ export async function registerRoutes(
     }
   });
 
+  // Delete Campaign
+  app.delete("/api/campaigns/:id", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const campaignRef = db.collection('campaigns').doc(req.params.id);
+      const campaignDoc = await campaignRef.get();
+
+      if (!campaignDoc.exists) {
+        return res.status(404).json({ error: 'Campaign not found' });
+      }
+
+      if (campaignDoc.data()?.ownerId !== req.user!.uid) {
+        return res.status(403).json({ error: 'Not authorized' });
+      }
+
+      await campaignRef.delete();
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Delete campaign error:', error);
+      res.status(500).json({ error: 'Failed to delete campaign' });
+    }
+  });
+
   // Send Campaign
   app.post("/api/campaigns/:id/send", authenticate, async (req: AuthRequest, res) => {
     try {

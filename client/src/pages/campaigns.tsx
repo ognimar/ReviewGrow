@@ -7,10 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Mail, MessageSquare, Loader2, Megaphone, Send, Eye, CheckCircle, Image } from "lucide-react";
+import { Plus, Mail, MessageSquare, Loader2, Megaphone, Send, Eye, CheckCircle, Image, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchCampaigns, fetchClients, fetchTemplates, createCampaign } from "@/lib/api";
+import { fetchCampaigns, fetchClients, fetchTemplates, createCampaign, deleteCampaign } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -124,6 +124,21 @@ export default function Campaigns() {
     onError: (error: any) => {
       toast({ 
         title: 'Failed to send campaign', 
+        description: error.message,
+        variant: 'destructive' 
+      });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteCampaign,
+    onSuccess: () => {
+      toast({ title: 'Kampania usunięta' });
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: 'Nie udało się usunąć kampanii', 
         description: error.message,
         variant: 'destructive' 
       });
@@ -430,6 +445,15 @@ export default function Campaigns() {
                   >
                     <Eye className="mr-2 h-4 w-4" />
                     Details
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={() => deleteMutation.mutate(campaign.id)}
+                    disabled={deleteMutation.isPending}
+                    data-testid={`button-delete-campaign-${campaign.id}`}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 </CardFooter>
               </Card>

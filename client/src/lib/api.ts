@@ -161,3 +161,13 @@ export async function deleteTemplate(id: string) {
   if (!response.ok) throw new Error('Failed to delete template');
   return response.json();
 }
+
+export async function deleteCampaign(id: string) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/campaigns/${id}`, {
+    method: 'DELETE',
+    headers,
+  });
+  if (!response.ok) throw new Error('Failed to delete campaign');
+  return response.json();
+}
