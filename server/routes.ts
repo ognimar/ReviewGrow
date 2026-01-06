@@ -10,7 +10,7 @@ import { generatePersonalizedImages } from "./services/imageService";
 import { sendSMS } from "./services/smsService";
 import { generateAuthUrl, exchangeCodeForTokens, getAccounts, getLocations, getReviews, generateReviewLink, refreshAccessToken, replyToReview } from "./services/googleBusinessService";
 import { generateAIReply } from "./services/aiReplyService";
-import { personalizeImageFromUrl, uploadToFirebaseStorage } from "./services/imageService";
+import { personalizeImageFromUrl, uploadToFirebaseStorage, deleteFromFirebaseStorage, extractStoragePathFromUrl } from "./services/imageService";
 import Stripe from "stripe";
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -378,7 +378,7 @@ export async function registerRoutes(
                 fontColor: template.fontColor || '#ffffff',
               }
             );
-            const imageUrl = await uploadToFirebaseStorage(
+            const { url: imageUrl } = await uploadToFirebaseStorage(
               imageBuffer,
               req.user!.uid,
               `campaign_${campaign.name}_${client.name?.replace(/\s+/g, '_') || 'client'}.jpg`
@@ -655,6 +655,19 @@ export async function registerRoutes(
 
       if (templateDoc.data()?.ownerId !== req.user!.uid) {
         return res.status(403).json({ error: 'Not authorized' });
+      }
+
+      // Delete the image from Firebase Storage
+      const templateData = templateDoc.data();
+      if (templateData?.imageUrl) {
+        const storagePath = extractStoragePathFromUrl(templateData.imageUrl);
+        if (storagePath) {
+          try {
+            await deleteFromFirebaseStorage(storagePath);
+          } catch (e) {
+            console.error('Failed to delete template image from storage:', e);
+          }
+        }
       }
 
       await templateRef.delete();

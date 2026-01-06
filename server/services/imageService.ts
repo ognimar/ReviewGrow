@@ -122,15 +122,15 @@ export async function uploadToFirebaseStorage(
   imageBuffer: Buffer,
   userId: string,
   fileName: string
-): Promise<string> {
+): Promise<{ url: string; storagePath: string }> {
   const storage = getStorage();
   if (!storage) {
     throw new Error('Firebase Storage not initialized');
   }
 
   const bucket = storage.bucket();
-  const uniqueFileName = `${userId}/${uuidv4()}-${fileName}`;
-  const file = bucket.file(uniqueFileName);
+  const storagePath = `${userId}/${uuidv4()}-${fileName}`;
+  const file = bucket.file(storagePath);
 
   await file.save(imageBuffer, {
     metadata: {
@@ -139,8 +139,38 @@ export async function uploadToFirebaseStorage(
     public: true,
   });
 
-  const publicUrl = `https://storage.googleapis.com/${bucket.name}/${uniqueFileName}`;
-  return publicUrl;
+  const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+  return { url: publicUrl, storagePath };
+}
+
+export async function deleteFromFirebaseStorage(storagePath: string): Promise<void> {
+  const storage = getStorage();
+  if (!storage) {
+    throw new Error('Firebase Storage not initialized');
+  }
+
+  try {
+    const bucket = storage.bucket();
+    const file = bucket.file(storagePath);
+    await file.delete();
+    console.log(`Deleted storage file: ${storagePath}`);
+  } catch (error: any) {
+    if (error.code === 404) {
+      console.log(`File not found, skipping: ${storagePath}`);
+    } else {
+      console.error(`Failed to delete storage file: ${storagePath}`, error);
+      throw error;
+    }
+  }
+}
+
+export function extractStoragePathFromUrl(url: string): string | null {
+  try {
+    const match = url.match(/storage\.googleapis\.com\/[^\/]+\/(.+)/);
+    return match ? decodeURIComponent(match[1]) : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function generatePersonalizedImages(
@@ -160,7 +190,7 @@ export async function generatePersonalizedImages(
       });
 
       const imageBuffer = Buffer.from(imageBase64, 'base64');
-      const imageUrl = await uploadToFirebaseStorage(
+      const { url: imageUrl } = await uploadToFirebaseStorage(
         imageBuffer,
         userId,
         `${client.name.replace(/\s+/g, '_')}.jpg`

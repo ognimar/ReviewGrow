@@ -78,6 +78,12 @@ SENDGRID_API_KEY=your-sendgrid-key
 Run `npm run dev` to start the development server on port 5000.
 
 ## Recent Changes
+- 2026-01-06: Added Firebase Storage cleanup on deletion
+  - Template deletion now removes the associated image from Firebase Storage
+  - Campaign deletion removes Firestore document (generated images during campaign send are orphaned - see note below)
+  - Added deleteFromFirebaseStorage and extractStoragePathFromUrl utility functions
+  - Note: Campaign-generated images ({{image}} replacements) are created per-send and not tracked for cleanup
+- 2026-01-06: Added campaign delete button
 - 2026-01-06: Integrated campaign templates with personalized image generation
   - Campaign form now includes template dropdown for selecting image templates
   - Live preview showing template with first contact's name overlay
