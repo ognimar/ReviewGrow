@@ -11,6 +11,7 @@ import Campaigns from "@/pages/campaigns";
 import Billing from "@/pages/billing";
 import AdminUsers from "@/pages/admin-users";
 import Templates from "@/pages/templates";
+import Settings from "@/pages/settings";
 import Login from "@/pages/login";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType<any> }) {
@@ -55,6 +56,9 @@ function Router() {
       </Route>
       <Route path="/templates">
         {() => <ProtectedRoute component={Templates} />}
+      </Route>
+      <Route path="/settings">
+        {() => <ProtectedRoute component={Settings} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

@@ -7,6 +7,7 @@ import { authenticate, requireAdmin, type AuthRequest } from "./middleware/auth"
 import { parseCSV } from "./services/csvService";
 import { generatePersonalizedImages } from "./services/imageService";
 import { sendSMS } from "./services/smsService";
+import { generateAuthUrl, exchangeCodeForTokens, getAccounts, getLocations, getReviews, generateReviewLink, refreshAccessToken } from "./services/googleBusinessService";
 import Stripe from "stripe";
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -86,7 +87,9 @@ export async function registerRoutes(
         return res.status(404).json({ error: 'User not found' });
       }
 
-      res.json({ id: req.user!.uid, ...userDoc.data() });
+      const userData = userDoc.data()!;
+      const { googleTokens, ...safeUserData } = userData;
+      res.json({ id: req.user!.uid, ...safeUserData });
     } catch (error) {
       console.error('Get user error:', error);
       res.status(500).json({ error: 'Failed to fetch user' });
@@ -315,8 +318,15 @@ export async function registerRoutes(
       let failedCount = 0;
       const errors: string[] = [];
 
+      // Get user's Google Business review link for {{google_link}} replacement
+      const userDoc = await db.collection('users').doc(req.user!.uid).get();
+      const userData = userDoc.data();
+      const googleReviewLink = userData?.googleBusiness?.reviewLink || '';
+
       for (const client of clients) {
-        const personalizedMessage = campaign.message.replace(/\{\{name\}\}/g, client.name || 'Customer');
+        let personalizedMessage = campaign.message
+          .replace(/\{\{name\}\}/g, client.name || 'Customer')
+          .replace(/\{\{google_link\}\}/g, googleReviewLink);
         
         if (campaign.type === 'sms' && client.phone) {
           const result = await sendSMS(client.phone, personalizedMessage);
@@ -345,9 +355,7 @@ export async function registerRoutes(
       });
 
       const userRef = db.collection('users').doc(req.user!.uid);
-      const userDoc = await userRef.get();
-      if (userDoc.exists) {
-        const userData = userDoc.data()!;
+      if (userData) {
         if (campaign.type === 'sms') {
           await userRef.update({ smsUsed: (userData.smsUsed || 0) + sentCount });
         } else {
@@ -659,6 +667,228 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Update user error:', error);
       res.status(500).json({ error: 'Failed to update user' });
+    }
+  });
+
+  // Google Business OAuth - Start
+  app.get("/api/auth/google/business", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const state = req.user!.uid;
+      const authUrl = generateAuthUrl(state);
+      res.json({ authUrl });
+    } catch (error) {
+      console.error('Google auth URL error:', error);
+      res.status(500).json({ error: 'Failed to generate auth URL' });
+    }
+  });
+
+  // Google Business OAuth - Callback
+  app.get("/api/auth/google/callback", async (req, res) => {
+    try {
+      const { code, state } = req.query;
+      
+      if (!code || !state) {
+        return res.redirect('/?error=missing_params');
+      }
+
+      const tokens = await exchangeCodeForTokens(code as string);
+      const userId = state as string;
+
+      const db = getFirestore();
+      if (!db) {
+        return res.redirect('/?error=db_unavailable');
+      }
+
+      await db.collection('users').doc(userId).update({
+        googleTokens: {
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token,
+          expiresAt: tokens.expiry_date,
+        },
+      });
+
+      res.redirect('/settings?connected=google');
+    } catch (error) {
+      console.error('Google callback error:', error);
+      res.redirect('/?error=auth_failed');
+    }
+  });
+
+  // Get Google Business Accounts
+  app.get("/api/google/accounts", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const userDoc = await db.collection('users').doc(req.user!.uid).get();
+      const userData = userDoc.data();
+
+      if (!userData?.googleTokens?.accessToken) {
+        return res.status(401).json({ error: 'Google not connected' });
+      }
+
+      let accessToken = userData.googleTokens.accessToken;
+      
+      if (userData.googleTokens.expiresAt < Date.now()) {
+        const newTokens = await refreshAccessToken(userData.googleTokens.refreshToken);
+        accessToken = newTokens.access_token!;
+        await db.collection('users').doc(req.user!.uid).update({
+          'googleTokens.accessToken': accessToken,
+          'googleTokens.expiresAt': newTokens.expiry_date,
+        });
+      }
+
+      const accounts = await getAccounts(accessToken);
+      res.json(accounts);
+    } catch (error: any) {
+      console.error('Get Google accounts error:', error);
+      res.status(500).json({ error: error.message || 'Failed to fetch accounts' });
+    }
+  });
+
+  // Get Google Business Locations
+  app.get("/api/google/locations/:accountName", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const userDoc = await db.collection('users').doc(req.user!.uid).get();
+      const userData = userDoc.data();
+
+      if (!userData?.googleTokens?.accessToken) {
+        return res.status(401).json({ error: 'Google not connected' });
+      }
+
+      let accessToken = userData.googleTokens.accessToken;
+      
+      if (userData.googleTokens.expiresAt < Date.now()) {
+        const newTokens = await refreshAccessToken(userData.googleTokens.refreshToken);
+        accessToken = newTokens.access_token!;
+        await db.collection('users').doc(req.user!.uid).update({
+          'googleTokens.accessToken': accessToken,
+          'googleTokens.expiresAt': newTokens.expiry_date,
+        });
+      }
+
+      const locations = await getLocations(accessToken, req.params.accountName);
+      res.json(locations);
+    } catch (error: any) {
+      console.error('Get locations error:', error);
+      res.status(500).json({ error: error.message || 'Failed to fetch locations' });
+    }
+  });
+
+  // Save selected Google Business Location
+  app.post("/api/google/location", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const { locationName, placeId, title, address } = req.body;
+
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const reviewLink = generateReviewLink(placeId);
+
+      await db.collection('users').doc(req.user!.uid).update({
+        googleBusiness: {
+          locationName,
+          placeId,
+          title,
+          address,
+          reviewLink,
+          connectedAt: new Date().toISOString(),
+        },
+      });
+
+      res.json({ success: true, reviewLink });
+    } catch (error) {
+      console.error('Save location error:', error);
+      res.status(500).json({ error: 'Failed to save location' });
+    }
+  });
+
+  // Get Google Business Reviews
+  app.get("/api/google/reviews", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const userDoc = await db.collection('users').doc(req.user!.uid).get();
+      const userData = userDoc.data();
+
+      if (!userData?.googleTokens?.accessToken || !userData?.googleBusiness?.locationName) {
+        return res.status(401).json({ error: 'Google Business not connected' });
+      }
+
+      let accessToken = userData.googleTokens.accessToken;
+      
+      if (userData.googleTokens.expiresAt < Date.now()) {
+        const newTokens = await refreshAccessToken(userData.googleTokens.refreshToken);
+        accessToken = newTokens.access_token!;
+        await db.collection('users').doc(req.user!.uid).update({
+          'googleTokens.accessToken': accessToken,
+          'googleTokens.expiresAt': newTokens.expiry_date,
+        });
+      }
+
+      const reviews = await getReviews(accessToken, userData.googleBusiness.locationName);
+      res.json(reviews);
+    } catch (error: any) {
+      console.error('Get reviews error:', error);
+      res.status(500).json({ error: error.message || 'Failed to fetch reviews' });
+    }
+  });
+
+  // Get Google Business Status
+  app.get("/api/google/status", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const userDoc = await db.collection('users').doc(req.user!.uid).get();
+      const userData = userDoc.data();
+
+      const isConnected = !!userData?.googleTokens?.accessToken;
+      const businessInfo = userData?.googleBusiness || null;
+
+      res.json({
+        connected: isConnected,
+        business: businessInfo,
+      });
+    } catch (error) {
+      console.error('Get Google status error:', error);
+      res.status(500).json({ error: 'Failed to fetch status' });
+    }
+  });
+
+  // Disconnect Google Business
+  app.delete("/api/google/disconnect", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const { FieldValue } = require('firebase-admin/firestore');
+      
+      await db.collection('users').doc(req.user!.uid).update({
+        googleTokens: FieldValue.delete(),
+        googleBusiness: FieldValue.delete(),
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Disconnect error:', error);
+      res.status(500).json({ error: 'Failed to disconnect' });
     }
   });
 

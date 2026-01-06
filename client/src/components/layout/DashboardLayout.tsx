@@ -7,6 +7,7 @@ import {
   Image as ImageIcon, 
   CreditCard, 
   ShieldCheck,
+  Settings,
   LogOut,
   Menu
 } from "lucide-react";
@@ -22,6 +23,7 @@ const navigation = [
   { name: 'Campaigns', href: '/campaigns', icon: Send },
   { name: 'Templates', href: '/templates', icon: ImageIcon },
   { name: 'Billing', href: '/billing', icon: CreditCard },
+  { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
 const adminNavigation = [

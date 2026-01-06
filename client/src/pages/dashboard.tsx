@@ -1,12 +1,27 @@
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, Send, Mail, MessageSquare, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Users, Send, Mail, MessageSquare, Loader2, Star, ExternalLink, Link2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchStats, fetchClients, fetchCampaigns } from "@/lib/api";
 import { Link } from "wouter";
+import { useAuth } from "@/contexts/AuthContext";
+
+interface GoogleStatus {
+  connected: boolean;
+  business: {
+    title: string;
+    address: string;
+    placeId: string;
+    reviewLink: string;
+    connectedAt: string;
+  } | null;
+}
 
 export default function Dashboard() {
+  const { user } = useAuth();
+
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['stats'],
     queryFn: fetchStats,
@@ -20,6 +35,17 @@ export default function Dashboard() {
   const { data: campaigns = [] } = useQuery({
     queryKey: ['campaigns'],
     queryFn: fetchCampaigns,
+  });
+
+  const { data: googleStatus } = useQuery<GoogleStatus>({
+    queryKey: ['google-status'],
+    queryFn: async () => {
+      const response = await fetch('/api/google/status', {
+        headers: { 'Authorization': `Bearer ${await user?.getIdToken()}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch status');
+      return response.json();
+    },
   });
 
   const smsQuota = 500;
@@ -93,7 +119,53 @@ export default function Dashboard() {
           </div>
         )}
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {/* Google Business Card */}
+          <Card data-testid="card-google-business">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <svg className="h-4 w-4" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Google Business
+              </CardTitle>
+              <Star className="h-4 w-4 text-yellow-500" />
+            </CardHeader>
+            <CardContent>
+              {googleStatus?.connected && googleStatus.business ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="default" className="bg-green-500 text-xs">Connected</Badge>
+                  </div>
+                  <p className="text-sm font-medium truncate">{googleStatus.business.title}</p>
+                  <a 
+                    href={googleStatus.business.reviewLink} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Review Link
+                  </a>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Badge variant="secondary" className="text-xs">Not Connected</Badge>
+                  <p className="text-xs text-muted-foreground">Connect to collect reviews</p>
+                  <Link href="/settings">
+                    <Button variant="outline" size="sm" className="w-full mt-2" data-testid="button-connect-google-dashboard">
+                      <Link2 className="mr-1 h-3 w-3" />
+                      Connect
+                    </Button>
+                  </Link>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Quick Actions</CardTitle>
@@ -132,12 +204,12 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <div className="flex items-start gap-4">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${googleStatus?.connected ? 'bg-green-100 text-green-600' : 'bg-muted text-muted-foreground'}`}>
                     2
                   </div>
                   <div>
-                    <p className="font-medium">Create a template</p>
-                    <p className="text-sm text-muted-foreground">Design personalized images with dynamic text</p>
+                    <p className="font-medium">Connect Google Business</p>
+                    <p className="text-sm text-muted-foreground">Get review links for campaigns</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-4">
