@@ -406,7 +406,15 @@ export async function registerRoutes(
           let result;
           if (imageUrl && campaign.message.includes('{{image}}')) {
             // Use MMS for messages with personalized images
-            result = await sendMMS(client.phone, personalizedMessage, imageUrl);
+            // Upload text message as file for SMIL
+            const cleanMessage = personalizedMessage.replace(/\{\{image\}\}/g, '').trim();
+            const textBuffer = Buffer.from(cleanMessage, 'utf-8');
+            const { url: textUrl } = await uploadToFirebaseStorage(
+              textBuffer,
+              req.user!.uid,
+              `campaign_${campaign.name.replace(/\s+/g, '_')}_${client.name?.replace(/\s+/g, '_') || 'client'}.txt`
+            );
+            result = await sendMMS(client.phone, personalizedMessage, imageUrl, textUrl);
           } else {
             // Use regular SMS (remove {{image}} placeholder if present but no image)
             const cleanMessage = personalizedMessage.replace(/\{\{image\}\}/g, '').trim();

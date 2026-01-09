@@ -145,7 +145,7 @@ function escapeXml(text: string): string {
 }
 
 export async function uploadToFirebaseStorage(
-  imageBuffer: Buffer,
+  buffer: Buffer,
   userId: string,
   fileName: string
 ): Promise<{ url: string; storagePath: string }> {
@@ -154,13 +154,23 @@ export async function uploadToFirebaseStorage(
     throw new Error('Firebase Storage not initialized');
   }
 
+  // Detect content type from file extension
+  let contentType = 'application/octet-stream';
+  if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) {
+    contentType = 'image/jpeg';
+  } else if (fileName.endsWith('.png')) {
+    contentType = 'image/png';
+  } else if (fileName.endsWith('.txt')) {
+    contentType = 'text/plain; charset=utf-8';
+  }
+
   const bucket = storage.bucket();
   const storagePath = `${userId}/${uuidv4()}-${fileName}`;
   const file = bucket.file(storagePath);
 
-  await file.save(imageBuffer, {
+  await file.save(buffer, {
     metadata: {
-      contentType: 'image/jpeg',
+      contentType,
     },
     public: true,
   });
