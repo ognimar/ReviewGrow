@@ -72,7 +72,8 @@ export async function personalizeImage(options: ImagePersonalizationOptions): Pr
 export async function personalizeImageFromUrl(
   imageUrl: string,
   text: string,
-  settings: { x: number; y: number; fontSize: number; fontColor: string }
+  settings: { x: number; y: number; fontSize: number; fontColor: string },
+  forMMS: boolean = false
 ): Promise<Buffer> {
   const { x, y, fontSize, fontColor } = settings;
   
@@ -81,13 +82,34 @@ export async function personalizeImageFromUrl(
   
   // Get image metadata to properly position text
   const metadata = await sharp(imageBuffer).metadata();
-  const width = metadata.width || 800;
-  const height = metadata.height || 600;
+  let width = metadata.width || 800;
+  let height = metadata.height || 600;
   
-  // Create SVG with text overlay
+  // For MMS, resize to max 640x480 to keep file size under 300KB
+  let resizedBuffer = imageBuffer;
+  if (forMMS) {
+    const maxWidth = 640;
+    const maxHeight = 480;
+    if (width > maxWidth || height > maxHeight) {
+      const scale = Math.min(maxWidth / width, maxHeight / height);
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+      resizedBuffer = await sharp(imageBuffer)
+        .resize(width, height)
+        .toBuffer();
+    }
+  }
+  
+  // Scale font size proportionally for MMS
+  const scaledFontSize = forMMS ? Math.round(fontSize * 0.5) : fontSize;
+  
+  // Create SVG with text overlay - x and y are percentages
+  const textX = Math.round((x / 100) * width);
+  const textY = Math.round((y / 100) * height);
+  
   const svgText = `
     <svg width="${width}" height="${height}">
-      <text x="${x}" y="${y}" font-family="Arial, sans-serif" font-size="${fontSize}" fill="${fontColor}" font-weight="bold">
+      <text x="${textX}" y="${textY}" font-family="Arial, sans-serif" font-size="${scaledFontSize}" fill="${fontColor}" font-weight="bold">
         ${escapeXml(text)}
       </text>
     </svg>
@@ -95,7 +117,10 @@ export async function personalizeImageFromUrl(
 
   const textBuffer = Buffer.from(svgText);
   
-  const result = await sharp(imageBuffer)
+  // For MMS use lower quality to meet file size limits
+  const quality = forMMS ? 60 : 85;
+  
+  const result = await sharp(resizedBuffer)
     .composite([
       {
         input: textBuffer,
@@ -103,7 +128,7 @@ export async function personalizeImageFromUrl(
         left: 0,
       }
     ])
-    .jpeg({ quality: 85 })
+    .jpeg({ quality, progressive: true })
     .toBuffer();
 
   return result;

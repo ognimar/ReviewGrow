@@ -376,7 +376,8 @@ export async function registerRoutes(
                 y: parseInt(template.textY) || 100,
                 fontSize: parseInt(template.fontSize) || 48,
                 fontColor: template.fontColor || '#ffffff',
-              }
+              },
+              true // forMMS - compress for MMS size limits
             );
             const { url: imageUrl } = await uploadToFirebaseStorage(
               imageBuffer,
