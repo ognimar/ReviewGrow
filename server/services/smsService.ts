@@ -65,10 +65,19 @@ export async function sendSMS(phone: string, message: string, senderName: string
   }
 }
 
+async function fetchImageAsBase64(url: string): Promise<string> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch image: ${response.status}`);
+  }
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer).toString('base64');
+}
+
 export async function sendMMS(
   phone: string, 
   message: string, 
-  imageUrl: string,
+  imageBuffer: Buffer,
   senderName: string = 'Info'
 ): Promise<SendSMSResult> {
   const token = process.env.SMSAPI_TOKEN;
@@ -87,26 +96,34 @@ export async function sendMMS(
   const formattedMessage = convertLinksToSmsapiFormat(cleanMessage);
   
   console.log('MMS message:', formattedMessage);
-  console.log('MMS image URL:', imageUrl);
+  console.log('MMS image size:', imageBuffer.length, 'bytes');
 
   try {
-    const params = new URLSearchParams({
-      to: cleanPhone,
-      message: formattedMessage,
-      from: senderName,
-      subject: 'MMS',
-      format: 'json',
-    });
+    // Create SMIL with just filename reference (not URL)
+    const smil = `<smil><head><layout><root-layout width="320" height="480"/><region id="Image" top="0" left="0" height="80%" width="100%" fit="meet"/><region id="Text" top="80%" left="0" height="20%" width="100%"/></layout></head><body><par dur="10s"><img src="image.jpg" region="Image"/><text src="text.txt" region="Text"/></par></body></smil>`;
 
-    if (imageUrl) {
-      params.append('smil', createSmil(formattedMessage, imageUrl));
-    }
+    // Create form data with image as file attachment
+    const formData = new FormData();
+    formData.append('to', cleanPhone);
+    formData.append('from', senderName);
+    formData.append('subject', 'MMS');
+    formData.append('smil', smil);
+    formData.append('format', 'json');
+    
+    // Attach image as file
+    const imageBlob = new Blob([imageBuffer], { type: 'image/jpeg' });
+    formData.append('file[0]', imageBlob, 'image.jpg');
+    
+    // Attach text as file
+    const textBlob = new Blob([formattedMessage], { type: 'text/plain' });
+    formData.append('file[1]', textBlob, 'text.txt');
 
-    const response = await fetch(`${SMSAPI_MMS_URL}?${params.toString()}`, {
+    const response = await fetch(SMSAPI_MMS_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
       },
+      body: formData,
     });
 
     const data = await response.json();
@@ -125,24 +142,6 @@ export async function sendMMS(
     console.error('MMS send error:', error);
     return { success: false, error: error.message || 'Failed to send MMS' };
   }
-}
-
-function createSmil(text: string, imageUrl: string): string {
-  return `<smil>
-    <head>
-      <layout>
-        <root-layout width="320" height="480"/>
-        <region id="Image" top="0" left="0" height="80%" width="100%" fit="meet"/>
-        <region id="Text" top="80%" left="0" height="20%" width="100%" fit="scroll"/>
-      </layout>
-    </head>
-    <body>
-      <par dur="10s">
-        <img src="${imageUrl}" region="Image"/>
-        <text src="data:text/plain,${encodeURIComponent(text)}" region="Text"/>
-      </par>
-    </body>
-  </smil>`;
 }
 
 export async function sendBulkSMS(
