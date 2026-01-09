@@ -381,7 +381,7 @@ export async function registerRoutes(
             const { url: imageUrl } = await uploadToFirebaseStorage(
               imageBuffer,
               req.user!.uid,
-              `campaign_${campaign.name}_${client.name?.replace(/\s+/g, '_') || 'client'}.jpg`
+              `campaign_${campaign.name.replace(/\s+/g, '_')}_${client.name?.replace(/\s+/g, '_') || 'client'}.jpg`
             );
             clientImageUrls.set(client.id, imageUrl);
           } catch (e: any) {
