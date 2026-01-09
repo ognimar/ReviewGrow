@@ -7,7 +7,7 @@ import { getFirestore, getStorage, initializeFirebase, isAdmin } from "./firebas
 import { authenticate, requireAdmin, type AuthRequest } from "./middleware/auth";
 import { parseCSV } from "./services/csvService";
 import { generatePersonalizedImages } from "./services/imageService";
-import { sendSMS } from "./services/smsService";
+import { sendSMS, sendMMS } from "./services/smsService";
 import { generateAuthUrl, exchangeCodeForTokens, getAccounts, getLocations, getReviews, generateReviewLink, refreshAccessToken, replyToReview } from "./services/googleBusinessService";
 import { generateAIReply } from "./services/aiReplyService";
 import { personalizeImageFromUrl, uploadToFirebaseStorage, deleteFromFirebaseStorage, extractStoragePathFromUrl } from "./services/imageService";
@@ -396,12 +396,19 @@ export async function registerRoutes(
           .replace(/\{\{name\}\}/g, client.name || 'Customer')
           .replace(/\{\{google_link\}\}/g, googleReviewLink);
         
-        // Replace {{image}} with the personalized image URL
+        // Get personalized image URL if available
         const imageUrl = clientImageUrls.get(client.id) || '';
-        personalizedMessage = personalizedMessage.replace(/\{\{image\}\}/g, imageUrl);
         
         if (campaign.type === 'sms' && client.phone) {
-          const result = await sendSMS(client.phone, personalizedMessage);
+          let result;
+          if (imageUrl && campaign.message.includes('{{image}}')) {
+            // Use MMS for messages with personalized images
+            result = await sendMMS(client.phone, personalizedMessage, imageUrl);
+          } else {
+            // Use regular SMS (remove {{image}} placeholder if present but no image)
+            const cleanMessage = personalizedMessage.replace(/\{\{image\}\}/g, '').trim();
+            result = await sendSMS(client.phone, cleanMessage);
+          }
           if (result.success) {
             sentCount++;
           } else {
