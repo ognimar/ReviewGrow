@@ -65,19 +65,10 @@ export async function sendSMS(phone: string, message: string, senderName: string
   }
 }
 
-async function fetchImageAsBase64(url: string): Promise<string> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch image: ${response.status}`);
-  }
-  const arrayBuffer = await response.arrayBuffer();
-  return Buffer.from(arrayBuffer).toString('base64');
-}
-
 export async function sendMMS(
   phone: string, 
   message: string, 
-  imageBuffer: Buffer,
+  imageUrl: string,
   senderName: string = 'Info'
 ): Promise<SendSMSResult> {
   const token = process.env.SMSAPI_TOKEN;
@@ -93,37 +84,26 @@ export async function sendMMS(
   }
 
   const cleanMessage = message.replace(/\{\{image\}\}/g, '').trim();
-  const formattedMessage = convertLinksToSmsapiFormat(cleanMessage);
   
-  console.log('MMS message:', formattedMessage);
-  console.log('MMS image size:', imageBuffer.length, 'bytes');
+  console.log('MMS message:', cleanMessage);
+  console.log('MMS image URL:', imageUrl);
 
   try {
-    // Create SMIL with cid: format for Content-ID references
-    const smil = `<?xml version="1.0"?><smil><head><meta name="author" content="CRG"/></head><body><par dur="5s"><image src="cid:image.jpg"/><text src="cid:text.txt"/></par></body></smil>`;
+    // Create SMIL with publicly accessible URLs (SMSAPI fetches them)
+    const smil = `<smil><head><layout><root-layout backgroundColor="#FFFFFF" height="100%" width="100%"/><region id="Image" top="0" left="0" height="80%" width="100%" fit="meet"/><region id="Text" top="80%" left="0" height="20%" width="100%" fit="scroll"/></layout></head><body><par dur="5000ms"><img src="${imageUrl}" region="Image"/></par><par dur="5000ms"><text src="data:text/plain;charset=utf-8,${encodeURIComponent(cleanMessage)}" region="Text"/></par></body></smil>`;
 
-    // Create form data with files attached
-    const formData = new FormData();
-    formData.append('to', cleanPhone);
-    formData.append('from', senderName);
-    formData.append('subject', 'MMS');
-    formData.append('smil', smil);
-    formData.append('format', 'json');
-    
-    // Attach image as file with matching content-id
-    const imageBlob = new Blob([imageBuffer], { type: 'image/jpeg' });
-    formData.append('file[0]', imageBlob, 'image.jpg');
-    
-    // Attach text as file with matching content-id
-    const textBlob = new Blob([formattedMessage], { type: 'text/plain' });
-    formData.append('file[1]', textBlob, 'text.txt');
+    const params = new URLSearchParams({
+      to: cleanPhone,
+      subject: 'MMS',
+      smil: smil,
+      format: 'json',
+    });
 
-    const response = await fetch(SMSAPI_MMS_URL, {
+    const response = await fetch(`${SMSAPI_MMS_URL}?${params.toString()}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
       },
-      body: formData,
     });
 
     const data = await response.json();

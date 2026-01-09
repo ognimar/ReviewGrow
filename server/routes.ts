@@ -363,7 +363,7 @@ export async function registerRoutes(
       }
 
       // Pre-generate personalized images if template is selected and message contains {{image}}
-      const clientImageBuffers: Map<string, Buffer> = new Map();
+      const clientImageUrls: Map<string, string> = new Map();
       if (template && campaign.message.includes('{{image}}')) {
         console.log(`Generating personalized images for ${clients.length} clients...`);
         for (const client of clients) {
@@ -379,13 +379,19 @@ export async function registerRoutes(
               },
               true // forMMS - compress for MMS size limits (<100KB)
             );
-            clientImageBuffers.set(client.id, imageBuffer);
-            console.log(`Generated image for ${client.name}: ${imageBuffer.length} bytes`);
+            // Upload to Firebase Storage to get public URL
+            const { url: imageUrl } = await uploadToFirebaseStorage(
+              imageBuffer,
+              req.user!.uid,
+              `campaign_${campaign.name.replace(/\s+/g, '_')}_${client.name?.replace(/\s+/g, '_') || 'client'}.jpg`
+            );
+            clientImageUrls.set(client.id, imageUrl);
+            console.log(`Generated image for ${client.name}: ${imageBuffer.length} bytes -> ${imageUrl}`);
           } catch (e: any) {
             console.error(`Failed to generate image for ${client.name}:`, e.message);
           }
         }
-        console.log(`Generated ${clientImageBuffers.size} personalized images`);
+        console.log(`Generated ${clientImageUrls.size} personalized images`);
       }
 
       for (const client of clients) {
@@ -393,14 +399,14 @@ export async function registerRoutes(
           .replace(/\{\{name\}\}/g, client.name || 'Customer')
           .replace(/\{\{google_link\}\}/g, googleReviewLink);
         
-        // Get personalized image buffer if available
-        const imageBuffer = clientImageBuffers.get(client.id);
+        // Get personalized image URL if available
+        const imageUrl = clientImageUrls.get(client.id);
         
         if (campaign.type === 'sms' && client.phone) {
           let result;
-          if (imageBuffer && campaign.message.includes('{{image}}')) {
+          if (imageUrl && campaign.message.includes('{{image}}')) {
             // Use MMS for messages with personalized images
-            result = await sendMMS(client.phone, personalizedMessage, imageBuffer);
+            result = await sendMMS(client.phone, personalizedMessage, imageUrl);
           } else {
             // Use regular SMS (remove {{image}} placeholder if present but no image)
             const cleanMessage = personalizedMessage.replace(/\{\{image\}\}/g, '').trim();
