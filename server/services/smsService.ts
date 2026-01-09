@@ -94,6 +94,7 @@ export async function sendMMS(
       to: cleanPhone,
       message: formattedMessage,
       from: senderName,
+      subject: 'MMS',
       format: 'json',
     });
 
