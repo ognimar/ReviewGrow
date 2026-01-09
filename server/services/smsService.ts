@@ -6,6 +6,14 @@ interface SendSMSResult {
   error?: string;
 }
 
+function convertLinksToSmsapiFormat(message: string): string {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  return message.replace(urlRegex, (url) => {
+    const cleanUrl = url.replace(/^https?:\/\//, '');
+    return `[%goto:${cleanUrl}%]`;
+  });
+}
+
 export async function sendSMS(phone: string, message: string, senderName: string = 'Info'): Promise<SendSMSResult> {
   const token = process.env.SMSAPI_TOKEN;
   
@@ -19,10 +27,12 @@ export async function sendSMS(phone: string, message: string, senderName: string
     return { success: false, error: 'Invalid phone number' };
   }
 
+  const formattedMessage = convertLinksToSmsapiFormat(message);
+
   try {
     const params = new URLSearchParams({
       to: cleanPhone,
-      message: message,
+      message: formattedMessage,
       from: senderName,
       format: 'json',
     });
