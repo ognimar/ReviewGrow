@@ -90,11 +90,13 @@ export async function sendMMS(
 
   try {
     // Create SMIL with publicly accessible URLs (SMSAPI fetches them)
-    const smil = `<smil><head><layout><root-layout backgroundColor="#FFFFFF" height="100%" width="100%"/><region id="Image" top="0" left="0" height="80%" width="100%" fit="meet"/><region id="Text" top="80%" left="0" height="20%" width="100%" fit="scroll"/></layout></head><body><par dur="5000ms"><img src="${imageUrl}" region="Image"/></par><par dur="5000ms"><text src="data:text/plain;charset=utf-8,${encodeURIComponent(cleanMessage)}" region="Text"/></par></body></smil>`;
+    // Only include image - text will be sent as message parameter
+    const smil = `<smil><head><layout><root-layout backgroundColor="#FFFFFF" height="100%" width="100%"/><region id="Image" top="0" left="0" height="100%" width="100%" fit="meet"/></layout></head><body><par dur="5000ms"><img src="${imageUrl}" region="Image"/></par></body></smil>`;
 
     const params = new URLSearchParams({
       to: cleanPhone,
       subject: 'MMS',
+      message: cleanMessage,
       smil: smil,
       format: 'json',
     });
