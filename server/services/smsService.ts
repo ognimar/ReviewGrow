@@ -28,6 +28,8 @@ export async function sendSMS(phone: string, message: string, senderName: string
   }
 
   const formattedMessage = convertLinksToSmsapiFormat(message);
+  console.log('SMS message (original):', message);
+  console.log('SMS message (formatted):', formattedMessage);
 
   try {
     const params = new URLSearchParams({
