@@ -3,11 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Loader2, ShieldAlert, MoreHorizontal, Ban, MessageSquare, Mail, UserCheck } from "lucide-react";
+import { Loader2, ShieldAlert, MoreHorizontal, Ban, UserCheck } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchAdminUsers } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,10 +17,14 @@ interface AdminUser {
   email: string;
   displayName: string;
   isAdmin: boolean;
-  subscription: string | null;
-  smsQuota: number;
+  subscription: {
+    planId: string;
+    status: string;
+    requestLimit: number;
+    requestsUsed: number;
+    expiresAt: string;
+  } | null;
   smsUsed: number;
-  emailQuota: number;
   emailUsed: number;
   createdAt: string;
   lastLogin: string;
@@ -35,8 +36,6 @@ export default function AdminUsers() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
-  const [quotaDialog, setQuotaDialog] = useState<'sms' | 'email' | null>(null);
-  const [quotaAmount, setQuotaAmount] = useState("");
 
   const { data: users = [], isLoading, error } = useQuery<AdminUser[]>({
     queryKey: ['admin-users'],
@@ -45,14 +44,14 @@ export default function AdminUsers() {
   });
 
   const updateUserMutation = useMutation({
-    mutationFn: async ({ userId, action, value }: { userId: string; action: string; value?: number }) => {
+    mutationFn: async ({ userId, action }: { userId: string; action: string }) => {
       const response = await fetch(`/api/admin/users/${userId}`, {
         method: 'PATCH',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${await user?.getIdToken()}`
         },
-        body: JSON.stringify({ action, value }),
+        body: JSON.stringify({ action }),
       });
       if (!response.ok) throw new Error('Failed to update user');
       return response.json();
@@ -60,35 +59,20 @@ export default function AdminUsers() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
       const actionMessages: Record<string, string> = {
-        ban: 'User has been banned',
-        unban: 'User has been unbanned',
-        addSms: 'SMS quota updated',
-        addEmail: 'Email quota updated',
+        ban: 'Użytkownik zablokowany',
+        unban: 'Użytkownik odblokowany',
       };
-      toast({ title: actionMessages[variables.action] || 'User updated' });
-      setQuotaDialog(null);
+      toast({ title: actionMessages[variables.action] || 'Zaktualizowano' });
       setSelectedUser(null);
-      setQuotaAmount("");
     },
     onError: () => {
-      toast({ title: 'Failed to update user', variant: 'destructive' });
+      toast({ title: 'Nie udało się zaktualizować', variant: 'destructive' });
     },
   });
 
   const handleBanUser = (targetUser: AdminUser) => {
     const action = targetUser.banned ? 'unban' : 'ban';
     updateUserMutation.mutate({ userId: targetUser.id, action });
-  };
-
-  const handleAddQuota = () => {
-    if (!selectedUser || !quotaDialog || !quotaAmount) return;
-    const amount = parseInt(quotaAmount);
-    if (isNaN(amount) || amount <= 0) {
-      toast({ title: 'Please enter a valid number', variant: 'destructive' });
-      return;
-    }
-    const action = quotaDialog === 'sms' ? 'addSms' : 'addEmail';
-    updateUserMutation.mutate({ userId: selectedUser.id, action, value: amount });
   };
 
   if (!isAdmin) {
@@ -103,7 +87,7 @@ export default function AdminUsers() {
     );
   }
 
-  const activeSubscriptions = users.filter(u => u.subscription).length;
+  const activeSubscriptions = users.filter(u => u.subscription?.status === 'active').length;
   const totalSmsUsed = users.reduce((acc, u) => acc + (u.smsUsed || 0), 0);
   const totalEmailsSent = users.reduce((acc, u) => acc + (u.emailUsed || 0), 0);
 
@@ -170,8 +154,8 @@ export default function AdminUsers() {
                     <TableHead>User</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>SMS Quota</TableHead>
-                    <TableHead>Email Quota</TableHead>
+                    <TableHead>Subscription</TableHead>
+                    <TableHead>Requests</TableHead>
                     <TableHead>Joined</TableHead>
                     <TableHead className="w-12">Actions</TableHead>
                   </TableRow>
@@ -193,8 +177,19 @@ export default function AdminUsers() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>{targetUser.smsUsed || 0} / {targetUser.smsQuota || 0}</TableCell>
-                      <TableCell>{targetUser.emailUsed || 0} / {targetUser.emailQuota || 0}</TableCell>
+                      <TableCell>
+                        {targetUser.subscription?.status === 'active' ? (
+                          <Badge variant="default" className="capitalize">{targetUser.subscription.planId}</Badge>
+                        ) : (
+                          <Badge variant="outline">Brak</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {targetUser.subscription?.status === 'active' 
+                          ? `${targetUser.subscription.requestsUsed || 0} / ${targetUser.subscription.requestLimit || 0}`
+                          : '-'
+                        }
+                      </TableCell>
                       <TableCell>
                         {targetUser.createdAt ? format(new Date(targetUser.createdAt), 'MMM d, yyyy') : '-'}
                       </TableCell>
@@ -206,26 +201,6 @@ export default function AdminUsers() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setSelectedUser(targetUser);
-                                setQuotaDialog('sms');
-                              }}
-                              data-testid={`menu-add-sms-${targetUser.id}`}
-                            >
-                              <MessageSquare className="mr-2 h-4 w-4" />
-                              Add SMS Quota
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setSelectedUser(targetUser);
-                                setQuotaDialog('email');
-                              }}
-                              data-testid={`menu-add-email-${targetUser.id}`}
-                            >
-                              <Mail className="mr-2 h-4 w-4" />
-                              Add Email Quota
-                            </DropdownMenuItem>
                             {!targetUser.isAdmin && (
                               <DropdownMenuItem
                                 onClick={() => handleBanUser(targetUser)}
@@ -235,12 +210,12 @@ export default function AdminUsers() {
                                 {targetUser.banned ? (
                                   <>
                                     <UserCheck className="mr-2 h-4 w-4" />
-                                    Unban User
+                                    Odblokuj
                                   </>
                                 ) : (
                                   <>
                                     <Ban className="mr-2 h-4 w-4" />
-                                    Ban User
+                                    Zablokuj
                                   </>
                                 )}
                               </DropdownMenuItem>
@@ -256,51 +231,6 @@ export default function AdminUsers() {
           </CardContent>
         </Card>
       </div>
-
-      <Dialog open={!!quotaDialog} onOpenChange={(open) => !open && setQuotaDialog(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              Add {quotaDialog === 'sms' ? 'SMS' : 'Email'} Quota
-            </DialogTitle>
-            <DialogDescription>
-              Add quota for {selectedUser?.displayName || selectedUser?.email}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Current Quota</Label>
-              <p className="text-sm text-muted-foreground">
-                {quotaDialog === 'sms' 
-                  ? `${selectedUser?.smsUsed || 0} / ${selectedUser?.smsQuota || 0} SMS used`
-                  : `${selectedUser?.emailUsed || 0} / ${selectedUser?.emailQuota || 0} emails sent`
-                }
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="quota-amount">Amount to Add</Label>
-              <Input
-                id="quota-amount"
-                type="number"
-                min="1"
-                value={quotaAmount}
-                onChange={(e) => setQuotaAmount(e.target.value)}
-                placeholder="Enter amount..."
-                data-testid="input-quota-amount"
-              />
-            </div>
-            <Button 
-              className="w-full" 
-              onClick={handleAddQuota}
-              disabled={updateUserMutation.isPending}
-              data-testid="button-confirm-quota"
-            >
-              {updateUserMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Add Quota
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </DashboardLayout>
   );
 }
