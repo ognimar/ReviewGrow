@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Check, Loader2, Crown, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { createCheckoutSession, fetchSubscriptionPlans, fetchBillingStatus } from "@/lib/api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createCheckoutSession, fetchSubscriptionPlans, fetchBillingStatus, verifyCheckoutSession } from "@/lib/api";
 import { useLocation } from "wouter";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -32,9 +32,11 @@ interface Subscription {
 
 export default function Billing() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [location] = useLocation();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const [verifying, setVerifying] = useState(false);
 
   const { data: plans = [], isLoading: plansLoading } = useQuery<SubscriptionPlan[]>({
     queryKey: ['subscription-plans'],
@@ -50,11 +52,32 @@ export default function Billing() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('success') === 'true') {
-      toast({
-        title: 'Płatność zakończona!',
-        description: 'Twoja subskrypcja została aktywowana.',
-      });
+    const sessionId = params.get('session_id');
+    
+    if (params.get('success') === 'true' && sessionId) {
+      // Verify and activate subscription
+      setVerifying(true);
+      verifyCheckoutSession(sessionId)
+        .then(() => {
+          toast({
+            title: 'Płatność zakończona!',
+            description: 'Twoja subskrypcja została aktywowana.',
+          });
+          // Refresh billing status and stats
+          queryClient.invalidateQueries({ queryKey: ['billing-status'] });
+          queryClient.invalidateQueries({ queryKey: ['stats'] });
+          // Clear URL params
+          window.history.replaceState({}, '', '/billing');
+        })
+        .catch((error) => {
+          console.error('Verification failed:', error);
+          toast({
+            title: 'Błąd weryfikacji',
+            description: 'Nie udało się aktywować subskrypcji. Skontaktuj się z supportem.',
+            variant: 'destructive',
+          });
+        })
+        .finally(() => setVerifying(false));
     } else if (params.get('canceled') === 'true') {
       toast({
         title: 'Płatność anulowana',
@@ -62,7 +85,7 @@ export default function Billing() {
         variant: 'destructive',
       });
     }
-  }, [location, toast]);
+  }, [location, toast, queryClient]);
 
   const checkoutMutation = useMutation({
     mutationFn: ({ planId, billingCycle }: { planId: string; billingCycle: 'monthly' | 'yearly' }) => 
@@ -100,11 +123,12 @@ export default function Billing() {
     return Math.round((savings / monthlyTotal) * 100);
   };
 
-  if (plansLoading || statusLoading) {
+  if (plansLoading || statusLoading || verifying) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center justify-center py-20 gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          {verifying && <p className="text-muted-foreground">Aktywowanie subskrypcji...</p>}
         </div>
       </DashboardLayout>
     );

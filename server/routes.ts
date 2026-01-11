@@ -755,7 +755,7 @@ export async function registerRoutes(
           },
         ],
         mode: isYearly ? 'payment' : 'subscription',
-        success_url: `${baseUrl}/billing?success=true`,
+        success_url: `${baseUrl}/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/billing?canceled=true`,
         customer_email: req.user!.email || undefined,
         metadata: {
@@ -864,6 +864,76 @@ export async function registerRoutes(
   });
 
   // Get user subscription status
+  // Verify and activate subscription from session (fallback for webhook)
+  app.post("/api/billing/verify-session", authenticate, async (req: AuthRequest, res) => {
+    try {
+      if (!stripe) {
+        return res.status(503).json({ error: 'Stripe not configured' });
+      }
+
+      const { sessionId } = req.body;
+      if (!sessionId) {
+        return res.status(400).json({ error: 'Session ID required' });
+      }
+
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      // Check if user already has an active subscription
+      const userDoc = await db.collection('users').doc(req.user!.uid).get();
+      const userData = userDoc.data();
+      if (userData?.subscription?.status === 'active') {
+        return res.json({ success: true, message: 'Subscription already active' });
+      }
+
+      // Retrieve session from Stripe
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      
+      if (session.payment_status !== 'paid') {
+        return res.status(400).json({ error: 'Payment not completed' });
+      }
+
+      // Verify the session belongs to this user
+      if (session.metadata?.userId !== req.user!.uid) {
+        return res.status(403).json({ error: 'Session does not belong to this user' });
+      }
+
+      const planId = session.metadata?.planId;
+      const billingCycle = session.metadata?.billingCycle;
+      const requestLimit = parseInt(session.metadata?.requestLimit || '0');
+
+      if (!planId) {
+        return res.status(400).json({ error: 'Invalid session metadata' });
+      }
+
+      const isYearly = billingCycle === 'yearly';
+      const expiresAt = new Date();
+      expiresAt.setMonth(expiresAt.getMonth() + (isYearly ? 12 : 1));
+
+      await db.collection('users').doc(req.user!.uid).update({
+        subscription: {
+          planId,
+          billingCycle,
+          status: 'active',
+          requestLimit,
+          requestsUsed: 0,
+          startedAt: new Date().toISOString(),
+          expiresAt: expiresAt.toISOString(),
+          stripeSessionId: session.id,
+          stripeSubscriptionId: session.subscription || null,
+        },
+      });
+
+      console.log(`Subscription activated via verify-session for user ${req.user!.uid}: ${planId} (${billingCycle})`);
+      res.json({ success: true, planId, requestLimit });
+    } catch (error: any) {
+      console.error('Verify session error:', error);
+      res.status(500).json({ error: error.message || 'Failed to verify session' });
+    }
+  });
+
   app.get("/api/billing/status", authenticate, async (req: AuthRequest, res) => {
     try {
       const db = getFirestore();

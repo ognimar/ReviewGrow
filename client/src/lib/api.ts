@@ -121,6 +121,20 @@ export async function fetchBillingStatus() {
   return response.json();
 }
 
+export async function verifyCheckoutSession(sessionId: string) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/billing/verify-session`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ sessionId }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || 'Failed to verify session');
+  }
+  return response.json();
+}
+
 export async function updateSubscriptionPlan(planId: string, data: any) {
   const headers = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/admin/subscription-plans/${planId}`, {
