@@ -575,14 +575,33 @@ export async function registerRoutes(
         .where('ownerId', '==', req.user!.uid)
         .get();
 
-      const smsQuota = userData?.smsQuota || 0;
+      // Get subscription-based quotas
+      const subscription = userData?.subscription;
+      const hasActiveSubscription = subscription && subscription.status === 'active';
+      
+      // Check if subscription is expired
+      const isExpired = subscription && new Date(subscription.expiresAt) < new Date();
+      
+      const requestLimit = hasActiveSubscription && !isExpired ? (subscription.requestLimit || 0) : 0;
+      const requestsUsed = hasActiveSubscription ? (subscription.requestsUsed || 0) : 0;
+      const requestsRemaining = Math.max(0, requestLimit - requestsUsed);
+
+      // Legacy SMS/Email counters (for display purposes)
       const smsUsed = userData?.smsUsed || 0;
-      const emailQuota = userData?.emailQuota || 0;
       const emailUsed = userData?.emailUsed || 0;
 
       res.json({
-        smsLeft: Math.max(0, smsQuota - smsUsed),
-        emailsLeft: Math.max(0, emailQuota - emailUsed),
+        // Subscription-based quotas (primary)
+        hasSubscription: hasActiveSubscription && !isExpired,
+        requestLimit,
+        requestsUsed,
+        requestsRemaining,
+        planId: hasActiveSubscription ? subscription.planId : null,
+        // Legacy counters (for backwards compatibility)
+        smsLeft: requestsRemaining,
+        emailsLeft: requestsRemaining,
+        smsUsed,
+        emailUsed,
         totalClients: clientsSnapshot.size,
         totalSent: smsUsed + emailUsed,
       });

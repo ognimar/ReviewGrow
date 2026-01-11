@@ -48,10 +48,10 @@ export default function Dashboard() {
     },
   });
 
-  const smsQuota = 500;
-  const emailQuota = 2000;
-  const smsUsed = smsQuota - (stats?.smsLeft || 0);
-  const emailsUsed = emailQuota - (stats?.emailsLeft || 0);
+  const hasSubscription = stats?.hasSubscription || false;
+  const requestLimit = stats?.requestLimit || 0;
+  const requestsUsed = stats?.requestsUsed || 0;
+  const requestsRemaining = stats?.requestsRemaining || 0;
 
   return (
     <DashboardLayout>
@@ -96,24 +96,44 @@ export default function Dashboard() {
                 <p className="text-xs text-muted-foreground">Total campaigns created</p>
               </CardContent>
             </Card>
-            <Card data-testid="card-sms-remaining">
+            <Card data-testid="card-requests-remaining">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">SMS Remaining</CardTitle>
+                <CardTitle className="text-sm font-medium">Requests Remaining</CardTitle>
                 <MessageSquare className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stats?.smsLeft || 0}</div>
-                <p className="text-xs text-muted-foreground">{smsUsed} used of {smsQuota}</p>
+                {hasSubscription ? (
+                  <>
+                    <div className="text-2xl font-bold">{requestsRemaining}</div>
+                    <p className="text-xs text-muted-foreground">{requestsUsed} used of {requestLimit}</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold text-muted-foreground">0</div>
+                    <p className="text-xs text-muted-foreground">No active subscription</p>
+                  </>
+                )}
               </CardContent>
             </Card>
-            <Card data-testid="card-emails-remaining">
+            <Card data-testid="card-subscription-status">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Emails Remaining</CardTitle>
+                <CardTitle className="text-sm font-medium">Subscription</CardTitle>
                 <Mail className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stats?.emailsLeft || 0}</div>
-                <p className="text-xs text-muted-foreground">{emailsUsed} used of {emailQuota}</p>
+                {hasSubscription ? (
+                  <>
+                    <div className="text-2xl font-bold capitalize">{stats?.planId}</div>
+                    <p className="text-xs text-muted-foreground">Active plan</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-xl font-bold text-amber-600">No plan</div>
+                    <Link href="/billing">
+                      <p className="text-xs text-primary hover:underline cursor-pointer">Choose a plan →</p>
+                    </Link>
+                  </>
+                )}
               </CardContent>
             </Card>
           </div>

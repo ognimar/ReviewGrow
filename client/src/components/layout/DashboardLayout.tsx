@@ -95,24 +95,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {/* Usage Stats (User Only) */}
           {!isAdmin && (
             <div className="space-y-2 py-2">
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">SMS</span>
-                  <span className="font-medium">{stats?.smsLeft || 0} left</span>
+              {stats?.hasSubscription ? (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Requests</span>
+                    <span className="font-medium">{stats.requestsRemaining} left</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-primary rounded-full transition-all" 
+                      style={{ width: `${Math.min(100, ((stats.requestsUsed || 0) / (stats.requestLimit || 1)) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground capitalize">{stats.planId} plan</p>
                 </div>
-                <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
-                  <div className="h-full bg-primary w-[76%] rounded-full" />
+              ) : (
+                <div className="space-y-1">
+                  <p className="text-xs text-amber-600 font-medium">No active subscription</p>
+                  <Link href="/billing">
+                    <span className="text-xs text-primary hover:underline cursor-pointer">Choose a plan →</span>
+                  </Link>
                 </div>
-              </div>
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Emails</span>
-                  <span className="font-medium">{stats?.emailsLeft || 0} left</span>
-                </div>
-                <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
-                   <div className="h-full bg-green-500 w-[15%] rounded-full" />
-                </div>
-              </div>
+              )}
             </div>
           )}
 
