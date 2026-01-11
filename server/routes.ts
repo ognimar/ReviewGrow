@@ -321,6 +321,68 @@ export async function registerRoutes(
         return res.status(503).json({ error: 'Database not available' });
       }
 
+      // Get clients first to count recipients for quota validation
+      const preClientSnapshot = await db.collection('clients')
+        .where('ownerId', '==', req.user!.uid)
+        .get();
+      
+      const totalRecipients = preClientSnapshot.size;
+
+      // Use transaction for atomic quota check and reservation (for non-admins)
+      const userRef = db.collection('users').doc(req.user!.uid);
+      let userData: any = null;
+      
+      if (!req.user?.isAdmin) {
+        try {
+          await db.runTransaction(async (transaction) => {
+            const userDoc = await transaction.get(userRef);
+            userData = userDoc.data();
+            const subscription = userData?.subscription;
+            
+            if (!subscription || subscription.status !== 'active') {
+              throw new Error('SUBSCRIPTION_REQUIRED');
+            }
+
+            // Check if subscription is expired
+            const expiresAt = new Date(subscription.expiresAt);
+            if (expiresAt < new Date()) {
+              transaction.update(userRef, { 'subscription.status': 'expired' });
+              throw new Error('SUBSCRIPTION_EXPIRED');
+            }
+
+            // Check request limit atomically
+            const requestsUsed = subscription.requestsUsed || 0;
+            const requestLimit = subscription.requestLimit || 0;
+            const projectedUsage = requestsUsed + totalRecipients;
+            
+            if (projectedUsage > requestLimit) {
+              throw new Error(`LIMIT_EXCEEDED:${totalRecipients}:${requestLimit - requestsUsed}`);
+            }
+
+            // Reserve the quota atomically by incrementing requestsUsed immediately
+            transaction.update(userRef, {
+              'subscription.requestsUsed': FieldValue.increment(totalRecipients),
+            });
+          });
+        } catch (txError: any) {
+          if (txError.message === 'SUBSCRIPTION_REQUIRED') {
+            return res.status(403).json({ error: 'Aktywna subskrypcja jest wymagana. Przejdź do strony Płatności, aby wybrać plan.' });
+          } else if (txError.message === 'SUBSCRIPTION_EXPIRED') {
+            return res.status(403).json({ error: 'Twoja subskrypcja wygasła. Odnów subskrypcję, aby kontynuować.' });
+          } else if (txError.message.startsWith('LIMIT_EXCEEDED:')) {
+            const parts = txError.message.split(':');
+            return res.status(403).json({ 
+              error: `Limit requestów nie pozwala wysłać do ${parts[1]} odbiorców. Pozostało: ${parts[2]} requestów. Ulepsz plan lub zmniejsz liczbę odbiorców.` 
+            });
+          }
+          throw txError;
+        }
+      } else {
+        // For admins, just fetch user data without quota check
+        const userDoc = await userRef.get();
+        userData = userDoc.data();
+      }
+
       const campaignRef = db.collection('campaigns').doc(req.params.id);
       const campaignDoc = await campaignRef.get();
 
@@ -348,9 +410,7 @@ export async function registerRoutes(
       let failedCount = 0;
       const errors: string[] = [];
 
-      // Get user's Google Business review link for {{google_link}} replacement
-      const userDoc = await db.collection('users').doc(req.user!.uid).get();
-      const userData = userDoc.data();
+      // Get Google Business review link from userData (already fetched above)
       const googleReviewLink = userData?.googleBusiness?.reviewLink || '';
 
       // Get template settings if templateId is set
@@ -444,12 +504,21 @@ export async function registerRoutes(
         failedCount,
       });
 
-      const userRef = db.collection('users').doc(req.user!.uid);
+      // Update SMS/Email usage counters (quota already reserved in transaction above)
       if (userData) {
+        const updates: any = {};
+        
         if (campaign.type === 'sms') {
-          await userRef.update({ smsUsed: (userData.smsUsed || 0) + sentCount });
+          updates.smsUsed = FieldValue.increment(sentCount);
         } else {
-          await userRef.update({ emailUsed: (userData.emailUsed || 0) + sentCount });
+          updates.emailUsed = FieldValue.increment(sentCount);
+        }
+        
+        // Note: subscription.requestsUsed was already atomically incremented in the transaction
+        // We do NOT increment it here to avoid double-counting
+        
+        if (Object.keys(updates).length > 0) {
+          await userRef.update(updates);
         }
       }
 
@@ -523,24 +592,132 @@ export async function registerRoutes(
     }
   });
 
-  // Stripe Checkout
+  // Initialize default subscription plans if not exist
+  async function initializeSubscriptionPlans() {
+    const db = getFirestore();
+    if (!db) return;
+
+    const plansRef = db.collection('subscriptionPlans');
+    const snapshot = await plansRef.get();
+    
+    if (snapshot.empty) {
+      const defaultPlans = [
+        {
+          id: 'starter',
+          name: 'Starter',
+          monthlyPrice: 11900, // 119.00 PLN in grosze
+          yearlyPrice: 119900, // 1199.00 PLN (10 months price for annual)
+          requestLimit: 50,
+          order: 1,
+          features: ['50 requestów/mies', 'Personalizowane obrazy', 'Kampanie SMS/Email'],
+        },
+        {
+          id: 'growth',
+          name: 'Growth',
+          monthlyPrice: 19900, // 199.00 PLN
+          yearlyPrice: 199900, // 1999.00 PLN
+          requestLimit: 100,
+          order: 2,
+          features: ['100 requestów/mies', 'Personalizowane obrazy', 'Kampanie SMS/Email', 'Priorytetowe wsparcie'],
+        },
+        {
+          id: 'pro',
+          name: 'Pro',
+          monthlyPrice: 39900, // 399.00 PLN
+          yearlyPrice: 399900, // 3999.00 PLN
+          requestLimit: 300,
+          order: 3,
+          features: ['300 requestów/mies', 'Personalizowane obrazy', 'Kampanie SMS/Email', 'Priorytetowe wsparcie', 'Dedykowany opiekun'],
+        },
+      ];
+
+      for (const plan of defaultPlans) {
+        await plansRef.doc(plan.id).set(plan);
+      }
+      console.log('Default subscription plans initialized');
+    }
+  }
+
+  // Initialize plans on startup
+  initializeSubscriptionPlans().catch(console.error);
+
+  // Get subscription plans (public)
+  app.get("/api/subscription-plans", async (req, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const snapshot = await db.collection('subscriptionPlans').orderBy('order').get();
+      const plans = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      res.json(plans);
+    } catch (error) {
+      console.error('Get plans error:', error);
+      res.status(500).json({ error: 'Failed to fetch plans' });
+    }
+  });
+
+  // Admin: Update subscription plan
+  app.patch("/api/admin/subscription-plans/:id", authenticate, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { name, monthlyPrice, yearlyPrice, requestLimit, features } = req.body;
+      const planId = req.params.id;
+
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const planRef = db.collection('subscriptionPlans').doc(planId);
+      const planDoc = await planRef.get();
+
+      if (!planDoc.exists) {
+        return res.status(404).json({ error: 'Plan not found' });
+      }
+
+      const updateData: any = {};
+      if (name !== undefined) updateData.name = name;
+      if (monthlyPrice !== undefined) updateData.monthlyPrice = monthlyPrice;
+      if (yearlyPrice !== undefined) updateData.yearlyPrice = yearlyPrice;
+      if (requestLimit !== undefined) updateData.requestLimit = requestLimit;
+      if (features !== undefined) updateData.features = features;
+
+      await planRef.update(updateData);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Update plan error:', error);
+      res.status(500).json({ error: 'Failed to update plan' });
+    }
+  });
+
+  // Stripe Checkout with dynamic plans
   app.post("/api/billing/checkout", authenticate, async (req: AuthRequest, res) => {
     try {
       if (!stripe) {
         return res.status(503).json({ error: 'Stripe not configured' });
       }
 
-      const { plan } = req.body;
+      const { planId, billingCycle } = req.body; // planId: 'starter'|'growth'|'pro', billingCycle: 'monthly'|'yearly'
 
-      const prices = {
-        monthly: { amount: 9900, interval: 'month' as const },
-        yearly: { amount: 96000, interval: 'year' as const },
-      };
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
 
-      const selectedPrice = prices[plan as keyof typeof prices];
-      if (!selectedPrice) {
+      // Get plan from Firestore
+      const planDoc = await db.collection('subscriptionPlans').doc(planId).get();
+      if (!planDoc.exists) {
         return res.status(400).json({ error: 'Invalid plan' });
       }
+
+      const plan = planDoc.data()!;
+      const isYearly = billingCycle === 'yearly';
+      const amount = isYearly ? plan.yearlyPrice : plan.monthlyPrice;
+
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
+        : 'http://localhost:5000';
 
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ['card'],
@@ -549,20 +726,24 @@ export async function registerRoutes(
             price_data: {
               currency: 'pln',
               product_data: {
-                name: plan === 'yearly' ? 'Pro Plan (Annual)' : 'Monthly Plan',
+                name: `${plan.name} (${isYearly ? 'Roczny' : 'Miesięczny'})`,
+                description: `${plan.requestLimit} requestów/${isYearly ? 'rok' : 'miesiąc'}`,
               },
-              unit_amount: selectedPrice.amount,
-              recurring: selectedPrice.interval === 'month' ? { interval: 'month' } : undefined,
+              unit_amount: amount,
+              recurring: isYearly ? undefined : { interval: 'month' },
             },
             quantity: 1,
           },
         ],
-        mode: plan === 'yearly' ? 'payment' : 'subscription',
-        success_url: `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'http://localhost:5000'}/billing?success=true`,
-        cancel_url: `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'http://localhost:5000'}/billing?canceled=true`,
+        mode: isYearly ? 'payment' : 'subscription',
+        success_url: `${baseUrl}/billing?success=true`,
+        cancel_url: `${baseUrl}/billing?canceled=true`,
+        customer_email: req.user!.email || undefined,
         metadata: {
           userId: req.user!.uid,
-          plan,
+          planId,
+          billingCycle,
+          requestLimit: plan.requestLimit.toString(),
         },
       });
 
@@ -570,6 +751,128 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Stripe checkout error:', error);
       res.status(500).json({ error: 'Failed to create checkout session' });
+    }
+  });
+
+  // Stripe Webhook
+  app.post("/api/billing/webhook", express.raw({ type: 'application/json' }), async (req, res) => {
+    if (!stripe) {
+      return res.status(503).send('Stripe not configured');
+    }
+
+    const sig = req.headers['stripe-signature'];
+    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    let event;
+
+    try {
+      if (endpointSecret && sig) {
+        event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+      } else {
+        // For development without webhook secret
+        event = JSON.parse(req.body.toString());
+      }
+    } catch (err: any) {
+      console.error('Webhook signature verification failed:', err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    const db = getFirestore();
+    if (!db) {
+      return res.status(503).send('Database not available');
+    }
+
+    try {
+      switch (event.type) {
+        case 'checkout.session.completed': {
+          const session = event.data.object;
+          const userId = session.metadata?.userId;
+          const planId = session.metadata?.planId;
+          const billingCycle = session.metadata?.billingCycle;
+          const requestLimit = parseInt(session.metadata?.requestLimit || '0');
+
+          if (userId && planId) {
+            const isYearly = billingCycle === 'yearly';
+            const expiresAt = new Date();
+            expiresAt.setMonth(expiresAt.getMonth() + (isYearly ? 12 : 1));
+
+            await db.collection('users').doc(userId).update({
+              subscription: {
+                planId,
+                billingCycle,
+                status: 'active',
+                requestLimit,
+                requestsUsed: 0,
+                startedAt: new Date().toISOString(),
+                expiresAt: expiresAt.toISOString(),
+                stripeSessionId: session.id,
+                stripeSubscriptionId: session.subscription || null,
+              },
+            });
+            console.log(`Subscription activated for user ${userId}: ${planId} (${billingCycle})`);
+          }
+          break;
+        }
+
+        case 'customer.subscription.updated': {
+          const subscription = event.data.object;
+          // Handle subscription updates if needed
+          break;
+        }
+
+        case 'customer.subscription.deleted': {
+          const subscription = event.data.object;
+          // Handle subscription cancellation
+          // Find user by subscription ID and deactivate
+          const usersSnapshot = await db.collection('users')
+            .where('subscription.stripeSubscriptionId', '==', subscription.id)
+            .get();
+
+          for (const doc of usersSnapshot.docs) {
+            await doc.ref.update({
+              'subscription.status': 'canceled',
+            });
+          }
+          break;
+        }
+      }
+
+      res.json({ received: true });
+    } catch (error) {
+      console.error('Webhook processing error:', error);
+      res.status(500).send('Webhook processing failed');
+    }
+  });
+
+  // Get user subscription status
+  app.get("/api/billing/status", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const userDoc = await db.collection('users').doc(req.user!.uid).get();
+      const userData = userDoc.data();
+
+      const subscription = userData?.subscription || null;
+
+      // Check if subscription is expired
+      if (subscription && subscription.expiresAt) {
+        const expiresAt = new Date(subscription.expiresAt);
+        if (expiresAt < new Date() && subscription.status === 'active') {
+          // Auto-expire subscription
+          await db.collection('users').doc(req.user!.uid).update({
+            'subscription.status': 'expired',
+          });
+          subscription.status = 'expired';
+        }
+      }
+
+      res.json({ subscription });
+    } catch (error) {
+      console.error('Get billing status error:', error);
+      res.status(500).json({ error: 'Failed to fetch billing status' });
     }
   });
 

@@ -28,6 +28,7 @@ const navigation = [
 
 const adminNavigation = [
   { name: 'User Management', href: '/admin/users', icon: ShieldCheck },
+  { name: 'Subscription Plans', href: '/admin/plans', icon: CreditCard },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

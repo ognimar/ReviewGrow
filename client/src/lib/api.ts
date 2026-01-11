@@ -94,17 +94,41 @@ export async function fetchStats() {
   return response.json();
 }
 
-export async function createCheckoutSession(plan: 'monthly' | 'yearly') {
+export async function fetchSubscriptionPlans() {
+  const response = await fetch(`${API_BASE}/subscription-plans`);
+  if (!response.ok) throw new Error('Failed to fetch plans');
+  return response.json();
+}
+
+export async function createCheckoutSession(planId: string, billingCycle: 'monthly' | 'yearly') {
   const headers = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/billing/checkout`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ plan }),
+    body: JSON.stringify({ planId, billingCycle }),
   });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.error || 'Failed to create checkout session');
   }
+  return response.json();
+}
+
+export async function fetchBillingStatus() {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/billing/status`, { headers });
+  if (!response.ok) throw new Error('Failed to fetch billing status');
+  return response.json();
+}
+
+export async function updateSubscriptionPlan(planId: string, data: any) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/admin/subscription-plans/${planId}`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error('Failed to update plan');
   return response.json();
 }
 

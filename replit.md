@@ -53,10 +53,15 @@ SENDGRID_API_KEY=your-sendgrid-key
 - **Campaigns**: Send SMS/MMS and Email campaigns with {{name}} and {{google_link}} tags
 - **Google Business Integration**: Connect Google Business Profile to collect reviews
 - **Usage Tracking**: Real-time SMS and Email quota display
-- **Billing**: Monthly (99 PLN/mo) or Annual (960 PLN/year) plans
+- **Subscription Plans**: Three tiers (Starter/Growth/Pro) with monthly and yearly billing
+  - Starter: 119 PLN/mies (50 requestów)
+  - Growth: 199 PLN/mies (100 requestów)  
+  - Pro: 399 PLN/mies (300 requestów)
+- **Usage Limits**: Request counter with limit enforcement before campaign sends
 
 ### Admin Features  
 - User management dashboard
+- Subscription plan management (edit prices, limits, features)
 - Subscription status overview
 - Global platform statistics
 
@@ -67,6 +72,23 @@ SENDGRID_API_KEY=your-sendgrid-key
 - `clients`: Customer contacts (isolated by ownerId)
 - `campaigns`: Campaign configurations and logs
 - `templates`: Image templates with settings
+- `subscriptionPlans`: Dynamic subscription plans (Starter/Growth/Pro)
+  - Fields: id, name, monthlyPrice, yearlyPrice, requestLimit, features[], order
+
+### Subscription Data Model (in users collection)
+```typescript
+subscription: {
+  planId: string;           // 'starter' | 'growth' | 'pro'
+  billingCycle: string;     // 'monthly' | 'yearly'
+  status: string;           // 'active' | 'expired' | 'canceled'
+  requestLimit: number;     // Max requests per period
+  requestsUsed: number;     // Current usage (atomic increment)
+  startedAt: string;        // ISO date
+  expiresAt: string;        // ISO date
+  stripeSessionId: string;
+  stripeSubscriptionId?: string;
+}
+```
 
 ## Security
 - Firebase Authentication with JWT verification
@@ -78,6 +100,15 @@ SENDGRID_API_KEY=your-sendgrid-key
 Run `npm run dev` to start the development server on port 5000.
 
 ## Recent Changes
+- 2026-01-11: Implemented full Stripe subscription system
+  - Three dynamic plans (Starter/Growth/Pro) stored in Firestore
+  - Monthly and yearly billing cycles with Stripe Checkout
+  - Webhook handler for subscription lifecycle (activation, cancellation)
+  - Request limit enforcement before campaign sends (counts recipients)
+  - Atomic usage tracking with FieldValue.increment to prevent race conditions
+  - Admin panel for editing subscription plan prices and limits
+  - Billing dashboard with subscription status and usage progress bar
+  - Access control: blocks campaign features for users without active subscription
 - 2026-01-06: Added Firebase Storage cleanup on deletion
   - Template deletion now removes the associated image from Firebase Storage
   - Campaign deletion removes Firestore document (generated images during campaign send are orphaned - see note below)

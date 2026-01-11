@@ -1,0 +1,49 @@
+Cel: Zaimplementuj system płatności Stripe bez darmowego planu, z dynamicznymi limitami zarządzanymi przez Admina oraz logiką subskrypcji rocznych i miesięcznych.
+
+1. Struktura Planów (Default z tabelki): Zaimplementuj trzy pakiety (ceny brutto PLN):
+
+    Starter: 119,00 zł/mies (Limit: 50 requestów/mies).
+
+    Growth: 199,00 zł/mies (Limit: 100 requestów/mies).
+
+    Pro: 399,00 zł/mies (Limit: 300 requestów/mies).
+
+2. Logika Subskrypcji:
+
+    Brak darmowego planu: Dostęp do funkcji wysyłki i generowania obrazów jest zablokowany do momentu wykupienia subskrypcji.
+
+    Plan Roczny (z góry): Użytkownik widzi cenę miesięczną, ale przy wyborze opcji rocznej Stripe pobiera opłatę za 12 miesięcy z góry.
+
+    Plan Miesięczny: Standardowa subskrypcja odnawialna co 30 dni.
+
+3. Panel Admina (Dynamiczne Zarządzanie):
+
+    Stwórz widok "Subscription Management" dostępny tylko dla roli OWNER.
+
+    Edycja Planów: Admin musi mieć możliwość zmiany:
+
+        Nazwy pakietu.
+
+        Ceny miesięcznej i rocznej.
+
+        Limitu requestów (SMS/Email/Dynamic Images) przypisanego do pakietu.
+
+    Zmiany wprowadzone przez Admina w UI muszą aktualizować rekordy w Firestore, które aplikacja sprawdza przed każdą kampanią.
+
+4. Limity i Walidacja (User Perspective):
+
+    Request Counter: Każdy wysłany SMS lub wygenerowane dynamiczne zdjęcie (z zakładki Image Templates) odejmuje 1 jednostkę z miesięcznego limitu użytkownika (limit_requestów).
+
+    Blokada: Jeśli użytkownik osiągnie 100% limitu, przycisk "Send Campaign" zostaje zablokowany z informacją o konieczności upgrade'u planu.
+
+5. Integracja z Stripe Checkout:
+
+    Użyj Stripe Prices API. Przy każdej próbie płatności aplikacja powinna pobierać aktualną cenę zdefiniowaną przez Admina w bazie danych.
+
+    Obsługa Webhooków: Po udanej płatności zaktualizuj pola subscriptionStatus, currentPlan oraz zresetuj licznik wykorzystanych requestów w dokumencie organizacji.
+
+6. UI/UX:
+
+    Pricing Page: Przejrzysta tabela z porównaniem planów (Starter/Growth/Pro).
+
+    Billing Dashboard: Użytkownik widzi pasek postępu (np. "Wykorzystano 34/50 requestów") oraz informację o dacie wygaśnięcia subskrypcji.

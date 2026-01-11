@@ -10,6 +10,7 @@ import Clients from "@/pages/clients";
 import Campaigns from "@/pages/campaigns";
 import Billing from "@/pages/billing";
 import AdminUsers from "@/pages/admin-users";
+import AdminPlans from "@/pages/admin-plans";
 import Templates from "@/pages/templates";
 import Settings from "@/pages/settings";
 import Login from "@/pages/login";
@@ -53,6 +54,9 @@ function Router() {
       </Route>
       <Route path="/admin/users">
         {() => <ProtectedRoute component={AdminUsers} />}
+      </Route>
+      <Route path="/admin/plans">
+        {() => <ProtectedRoute component={AdminPlans} />}
       </Route>
       <Route path="/templates">
         {() => <ProtectedRoute component={Templates} />}
