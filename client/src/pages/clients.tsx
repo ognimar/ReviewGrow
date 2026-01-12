@@ -18,7 +18,27 @@ interface Client {
   name: string;
   phone: string;
   email: string;
+  status?: 'NEW' | 'SENT' | 'CLICKED' | 'PENDING_REVIEW' | 'RESPONDED';
   createdAt: string;
+  lastSentAt?: string;
+}
+
+function StatusBadge({ status }: { status?: string }) {
+  const configs: Record<string, { label: string; className: string }> = {
+    NEW: { label: 'Nowy', className: 'bg-gray-100 text-gray-800' },
+    SENT: { label: 'Wysłano', className: 'bg-blue-100 text-blue-800' },
+    CLICKED: { label: 'Kliknął', className: 'bg-yellow-100 text-yellow-800' },
+    PENDING_REVIEW: { label: 'Oczekuje', className: 'bg-orange-100 text-orange-800' },
+    RESPONDED: { label: 'Odpowiedział', className: 'bg-green-100 text-green-800' },
+  };
+  
+  const config = configs[status || 'NEW'] || configs.NEW;
+  
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${config.className}`}>
+      {config.label}
+    </span>
+  );
 }
 
 export default function Clients() {
@@ -236,6 +256,7 @@ export default function Clients() {
                     <TableHead>Name</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>Added</TableHead>
                     <TableHead className="w-24">Actions</TableHead>
                   </TableRow>
@@ -246,6 +267,9 @@ export default function Clients() {
                       <TableCell className="font-medium">{client.name}</TableCell>
                       <TableCell>{client.phone || '-'}</TableCell>
                       <TableCell>{client.email || '-'}</TableCell>
+                      <TableCell>
+                        <StatusBadge status={client.status} />
+                      </TableCell>
                       <TableCell>
                         {client.createdAt ? format(new Date(client.createdAt), 'MMM d, yyyy') : '-'}
                       </TableCell>

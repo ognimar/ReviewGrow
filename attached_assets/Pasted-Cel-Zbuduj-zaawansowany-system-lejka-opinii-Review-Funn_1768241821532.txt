@@ -1,0 +1,59 @@
+Cel: Zbuduj zaawansowany system lejka opinii (Review Funnel) z automatyczną weryfikacją, systemem statusów i inteligentnym filtrowaniem odbiorców.
+
+1. Architektura Statusów Klienta (Firestore):
+
+Każdy kontakt w kolekcji contacts musi posiadać pole status. Zaimplementuj następujący cykl życia:
+
+
+NEW: Kontakt zaimportowany, jeszcze bez wysyłki.
+
+SENT: SMS z unikalnym linkiem został wysłany.
+
+CLICKED: Klient otworzył link, ale nie przeszedł jeszcze do Google.
+
+PENDING_REVIEW: Klient kliknął 4/5 gwiazdek i otworzył okno Google Review.
+
+RESPONDED: Status Finalny. Potwierdzono (przez API), że opinia została opublikowana.
+
+2. Mechanika Unikalnych Linków i Tracking Page:
+
+
+Generator: Przy wysyłce kampanii generuj unikalny slug dla każdego odbiorcy (np. rh1.pl/u/x8v2n).
+
+Landing Page: Strona pośrednia musi być lekka i mobilna.
+
+Po wejściu: Zmień status na CLICKED.
+
+Wybór 1-3 gwiazdek: Pokaż wewnętrzny formularz reklamacji (status pozostaje CLICKED).
+
+Wybór 4-5 gwiazdek: Zmień status na PENDING_REVIEW i przejdź do kroku 3.
+
+3. Logika "Focus-Verify-Redirect" (z nagrania 0:24):
+
+Zaimplementuj mechanizm natychmiastowego wykrywania konwersji:
+
+
+Action: Po kliknięciu 4/5 gwiazdek, otwórz https://search.google.com/local/writereview?placeid={{placeId}} w nowym oknie/popupie.
+
+Focus Detection: Główna strona aplikacji musi nasłuchiwać zdarzenia window.onfocus.
+
+Verification Loop: Gdy użytkownik wróci na stronę (zamknie okno Google):
+
+Backend odpytuje Google Business Profile API w poszukiwaniu najnowszej recenzji od {{customerName}}.
+
+Jeśli opinia zostanie znaleziona: Zaktualizuj status na RESPONDED i wykonaj automatyczny redirect (bez klikania!) na stronę /success.
+
+Strona /success wyświetla podziękowanie i ewentualny bonus.
+
+4. Inteligentne Zarządzanie Kampaniami:
+
+
+Automatyczne Wykluczanie: Podczas przygotowywania nowej kampanii (moduł wysyłki), system musi automatycznie usunąć z listy wszystkich klientów ze statusem RESPONDED.
+
+Frequency Capping: Zablokuj możliwość wysłania SMS-a do osób ze statusem SENT lub CLICKED, jeśli od ostatniej wysyłki minęło mniej niż 3 dni.
+
+Dashboard Sync: Statystyki w panelu głównym (widocznym na wideo) muszą pokazywać:
+
+Wskaźnik Konwersji (ile osób SENT przeszło do RESPONDED).
+
+Liczbę „Uratowanych Klientów” (osoby, które dały 1-3 gwiazdki wewnątrz apki, zamiast w Google).

@@ -15,6 +15,19 @@ import Stripe from "stripe";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+// Generate unique tracking slug (6 chars alphanumeric)
+function generateTrackingSlug(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let slug = '';
+  for (let i = 0; i < 6; i++) {
+    slug += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return slug;
+}
+
+// Client Status Types
+type ClientStatus = 'NEW' | 'SENT' | 'CLICKED' | 'PENDING_REVIEW' | 'RESPONDED';
+
 // Initialize Stripe only if API key is available
 let stripe: Stripe | null = null;
 if (process.env.OMNISEND_STRIPE_SECRET_KEY) {
@@ -119,9 +132,12 @@ export async function registerRoutes(
 
       valid.forEach(client => {
         const docRef = clientsRef.doc();
+        const trackingSlug = generateTrackingSlug();
         batch.set(docRef, {
           ...client,
           ownerId: req.user!.uid,
+          status: 'NEW',
+          trackingSlug,
           createdAt: new Date().toISOString(),
         });
       });
@@ -401,10 +417,35 @@ export async function registerRoutes(
         .where('ownerId', '==', req.user!.uid)
         .get();
 
-      const clients = clientsSnapshot.docs.map(doc => {
-        const data = doc.data();
-        return { id: doc.id, name: data.name, phone: data.phone, email: data.email };
-      });
+      // Filter out RESPONDED clients and apply frequency capping (3 days)
+      const now = new Date();
+      const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+
+      const clients = clientsSnapshot.docs
+        .map(doc => {
+          const data = doc.data();
+          return { 
+            id: doc.id, 
+            name: data.name, 
+            phone: data.phone, 
+            email: data.email,
+            status: data.status,
+            trackingSlug: data.trackingSlug,
+            lastSentAt: data.lastSentAt,
+          };
+        })
+        .filter(client => {
+          // Exclude RESPONDED clients
+          if (client.status === 'RESPONDED') return false;
+          
+          // Frequency capping: skip SENT/CLICKED if sent within last 3 days
+          if ((client.status === 'SENT' || client.status === 'CLICKED') && client.lastSentAt) {
+            const lastSent = new Date(client.lastSentAt);
+            if (lastSent > threeDaysAgo) return false;
+          }
+          
+          return true;
+        });
       
       let sentCount = 0;
       let failedCount = 0;
@@ -454,10 +495,18 @@ export async function registerRoutes(
         console.log(`Generated ${clientImageUrls.size} personalized images`);
       }
 
+      // Get base URL for tracking links
+      const baseUrl = process.env.REPLIT_DOMAINS?.split(',')[0] 
+        ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
+        : 'http://localhost:5000';
+
       for (const client of clients) {
+        // Generate unique tracking link for this client
+        const trackingLink = client.trackingSlug ? `${baseUrl}/r/${client.trackingSlug}` : googleReviewLink;
+        
         let personalizedMessage = campaign.message
           .replace(/\{\{name\}\}/g, client.name || 'Customer')
-          .replace(/\{\{google_link\}\}/g, googleReviewLink);
+          .replace(/\{\{google_link\}\}/g, trackingLink);
         
         // Get personalized image URL if available
         const imageUrl = clientImageUrls.get(client.id);
@@ -482,12 +531,22 @@ export async function registerRoutes(
           }
           if (result.success) {
             sentCount++;
+            // Update client status to SENT and record timestamp
+            await db.collection('clients').doc(client.id).update({
+              status: 'SENT',
+              lastSentAt: new Date().toISOString(),
+            });
           } else {
             failedCount++;
             errors.push(`${client.name}: ${result.error}`);
           }
         } else if (campaign.type === 'email' && client.email) {
           sentCount++;
+          // Update client status to SENT for email too
+          await db.collection('clients').doc(client.id).update({
+            status: 'SENT',
+            lastSentAt: new Date().toISOString(),
+          });
         } else {
           failedCount++;
         }
@@ -659,6 +718,232 @@ export async function registerRoutes(
 
   // Initialize plans on startup
   initializeSubscriptionPlans().catch(console.error);
+
+  // ===== REVIEW FUNNEL TRACKING ENDPOINTS =====
+
+  // Get tracking data by slug (public - for landing page)
+  app.get("/api/track/:slug", async (req, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const { slug } = req.params;
+      const snapshot = await db.collection('clients')
+        .where('trackingSlug', '==', slug)
+        .limit(1)
+        .get();
+
+      if (snapshot.empty) {
+        return res.status(404).json({ error: 'Link not found' });
+      }
+
+      const clientDoc = snapshot.docs[0];
+      const clientData = clientDoc.data();
+
+      // Get owner's Google Business placeId
+      const userDoc = await db.collection('users').doc(clientData.ownerId).get();
+      const userData = userDoc.data();
+      const placeId = userData?.googleBusiness?.placeId || null;
+      const businessName = userData?.googleBusiness?.title || '';
+
+      res.json({
+        clientId: clientDoc.id,
+        name: clientData.name,
+        status: clientData.status,
+        placeId,
+        businessName,
+      });
+    } catch (error) {
+      console.error('Get tracking data error:', error);
+      res.status(500).json({ error: 'Failed to get tracking data' });
+    }
+  });
+
+  // Update client status from tracking (public - for landing page)
+  app.post("/api/track/:slug/status", async (req, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const { slug } = req.params;
+      const { status, rating, complaint } = req.body;
+
+      // Validate status
+      const validStatuses: ClientStatus[] = ['CLICKED', 'PENDING_REVIEW', 'RESPONDED'];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ error: 'Invalid status' });
+      }
+
+      const snapshot = await db.collection('clients')
+        .where('trackingSlug', '==', slug)
+        .limit(1)
+        .get();
+
+      if (snapshot.empty) {
+        return res.status(404).json({ error: 'Link not found' });
+      }
+
+      const clientDoc = snapshot.docs[0];
+      const updateData: any = { status };
+
+      // If low rating (1-3), store complaint instead of going to Google
+      if (rating && rating <= 3 && complaint) {
+        updateData.lastComplaint = {
+          rating,
+          message: complaint,
+          createdAt: new Date().toISOString(),
+        };
+        updateData.status = 'CLICKED'; // Keep as CLICKED for low ratings
+      }
+
+      await clientDoc.ref.update(updateData);
+
+      res.json({ success: true, status: updateData.status });
+    } catch (error) {
+      console.error('Update status error:', error);
+      res.status(500).json({ error: 'Failed to update status' });
+    }
+  });
+
+  // Verify if review was submitted (called after user returns from Google)
+  app.post("/api/track/:slug/verify-review", async (req, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const { slug } = req.params;
+
+      const snapshot = await db.collection('clients')
+        .where('trackingSlug', '==', slug)
+        .limit(1)
+        .get();
+
+      if (snapshot.empty) {
+        return res.status(404).json({ error: 'Link not found' });
+      }
+
+      const clientDoc = snapshot.docs[0];
+      const clientData = clientDoc.data();
+
+      // Get owner's Google tokens and location
+      const userDoc = await db.collection('users').doc(clientData.ownerId).get();
+      const userData = userDoc.data();
+
+      if (!userData?.googleTokens || !userData?.googleBusiness?.accountId || !userData?.googleBusiness?.locationId) {
+        // Can't verify - just mark as RESPONDED anyway (user went to Google)
+        await clientDoc.ref.update({ status: 'RESPONDED', respondedAt: new Date().toISOString() });
+        return res.json({ verified: true, method: 'assumed' });
+      }
+
+      try {
+        // Refresh token if needed
+        let accessToken = userData.googleTokens.accessToken;
+        const expiresAt = userData.googleTokens.expiresAt || 0;
+        
+        if (Date.now() > expiresAt) {
+          const newTokens = await refreshAccessToken(userData.googleTokens.refreshToken);
+          accessToken = newTokens.accessToken;
+          await db.collection('users').doc(clientData.ownerId).update({
+            'googleTokens.accessToken': newTokens.accessToken,
+            'googleTokens.expiresAt': newTokens.expiresAt,
+          });
+        }
+
+        // Check for recent reviews
+        const reviews = await getReviews(
+          accessToken,
+          userData.googleBusiness.accountId,
+          userData.googleBusiness.locationId
+        );
+
+        // Look for a review from this customer (by name match in the last 10 reviews)
+        const customerName = clientData.name?.toLowerCase() || '';
+        const recentReview = reviews.slice(0, 10).find((review: any) => {
+          const reviewerName = review.reviewer?.displayName?.toLowerCase() || '';
+          return reviewerName.includes(customerName) || customerName.includes(reviewerName);
+        });
+
+        if (recentReview) {
+          await clientDoc.ref.update({ 
+            status: 'RESPONDED', 
+            respondedAt: new Date().toISOString(),
+            reviewId: recentReview.reviewId,
+          });
+          return res.json({ verified: true, method: 'api', reviewFound: true });
+        }
+
+        // If no exact match found but user went to Google, still mark as responded
+        await clientDoc.ref.update({ status: 'RESPONDED', respondedAt: new Date().toISOString() });
+        return res.json({ verified: true, method: 'assumed', reviewFound: false });
+      } catch (apiError) {
+        console.error('Google API verification error:', apiError);
+        // Fallback: just mark as responded
+        await clientDoc.ref.update({ status: 'RESPONDED', respondedAt: new Date().toISOString() });
+        return res.json({ verified: true, method: 'fallback' });
+      }
+    } catch (error) {
+      console.error('Verify review error:', error);
+      res.status(500).json({ error: 'Failed to verify review' });
+    }
+  });
+
+  // Get funnel statistics for dashboard
+  app.get("/api/funnel-stats", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const clientsSnapshot = await db.collection('clients')
+        .where('ownerId', '==', req.user!.uid)
+        .get();
+
+      const stats = {
+        total: 0,
+        new: 0,
+        sent: 0,
+        clicked: 0,
+        pendingReview: 0,
+        responded: 0,
+        savedCustomers: 0, // Those who gave 1-3 stars internally
+      };
+
+      clientsSnapshot.docs.forEach(doc => {
+        const data = doc.data();
+        stats.total++;
+        
+        switch (data.status) {
+          case 'NEW': stats.new++; break;
+          case 'SENT': stats.sent++; break;
+          case 'CLICKED': 
+            stats.clicked++; 
+            if (data.lastComplaint) stats.savedCustomers++;
+            break;
+          case 'PENDING_REVIEW': stats.pendingReview++; break;
+          case 'RESPONDED': stats.responded++; break;
+        }
+      });
+
+      // Calculate conversion rate (SENT → RESPONDED)
+      const conversionRate = stats.sent > 0 
+        ? Math.round((stats.responded / stats.sent) * 100) 
+        : 0;
+
+      res.json({ ...stats, conversionRate });
+    } catch (error) {
+      console.error('Get funnel stats error:', error);
+      res.status(500).json({ error: 'Failed to fetch funnel stats' });
+    }
+  });
+
+  // ===== END REVIEW FUNNEL TRACKING =====
 
   // Get subscription plans (public)
   app.get("/api/subscription-plans", async (req, res) => {

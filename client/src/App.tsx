@@ -14,6 +14,8 @@ import AdminPlans from "@/pages/admin-plans";
 import Templates from "@/pages/templates";
 import Settings from "@/pages/settings";
 import Login from "@/pages/login";
+import ReviewLanding from "@/pages/review-landing";
+import ReviewSuccess from "@/pages/review-success";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType<any> }) {
   const { user, loading } = useAuth();
@@ -40,6 +42,8 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/r/:slug" component={ReviewLanding} />
+      <Route path="/success" component={ReviewSuccess} />
       <Route path="/">
         {() => <ProtectedRoute component={Dashboard} />}
       </Route>
