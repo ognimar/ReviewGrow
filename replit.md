@@ -58,6 +58,11 @@ SENDGRID_API_KEY=your-sendgrid-key
   - Growth: 199 PLN/mies (100 requestów)  
   - Pro: 399 PLN/mies (300 requestów)
 - **Usage Limits**: Request counter with limit enforcement before campaign sends
+- **Review Funnel**: Smart review collection with negative feedback interception
+  - Unique tracking links for each client
+  - Low ratings (1-3) stored internally as "saved customers"
+  - High ratings (4-5) redirect to Google for public review
+  - Auto-exclusion of clients who already responded
 
 ### Admin Features  
 - User management dashboard
@@ -100,6 +105,16 @@ subscription: {
 Run `npm run dev` to start the development server on port 5000.
 
 ## Recent Changes
+- 2026-01-12: Implemented Review Funnel System
+  - Client status lifecycle: NEW → SENT → CLICKED → PENDING_REVIEW → RESPONDED
+  - Unique 6-character tracking slugs for each client (stored in trackingSlug field)
+  - Mobile-friendly landing page at /r/:slug with star rating selection
+  - Low ratings (1-3 stars) capture complaints internally, marking clients as "saved customers"
+  - High ratings (4-5 stars) redirect to Google Business review page
+  - Focus detection triggers verification when user returns from Google
+  - Campaign filtering excludes RESPONDED clients and applies 3-day frequency capping for SENT/CLICKED
+  - Dashboard displays funnel statistics with conversion rate and "saved customers" metric
+  - Status badges on clients page showing review funnel progress
 - 2026-01-11: Implemented full Stripe subscription system
   - Three dynamic plans (Starter/Growth/Pro) stored in Firestore
   - Monthly and yearly billing cycles with Stripe Checkout
