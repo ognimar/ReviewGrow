@@ -2,9 +2,10 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Users, Send, Mail, MessageSquare, Loader2, Star, ExternalLink, Link2 } from "lucide-react";
+import { Users, Send, Mail, MessageSquare, Loader2, Star, ExternalLink, Link2, TrendingUp, Heart, ArrowRight } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchStats, fetchClients, fetchCampaigns } from "@/lib/api";
+import { fetchStats, fetchClients, fetchCampaigns, fetchFunnelStats } from "@/lib/api";
+import { Progress } from "@/components/ui/progress";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -46,6 +47,11 @@ export default function Dashboard() {
       if (!response.ok) throw new Error('Failed to fetch status');
       return response.json();
     },
+  });
+
+  const { data: funnelStats } = useQuery({
+    queryKey: ['funnel-stats'],
+    queryFn: fetchFunnelStats,
   });
 
   const hasSubscription = stats?.hasSubscription || false;
@@ -137,6 +143,62 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           </div>
+        )}
+
+        {/* Review Funnel Stats */}
+        {funnelStats && funnelStats.total > 0 && (
+          <Card className="mb-4" data-testid="card-funnel-stats">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-primary" />
+                Review Funnel
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-5 mb-4">
+                <div className="text-center p-3 rounded-lg bg-gray-50">
+                  <div className="text-2xl font-bold">{funnelStats.new}</div>
+                  <div className="text-xs text-muted-foreground">Nowi</div>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-blue-50">
+                  <div className="text-2xl font-bold text-blue-600">{funnelStats.sent}</div>
+                  <div className="text-xs text-muted-foreground">Wysłano</div>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-yellow-50">
+                  <div className="text-2xl font-bold text-yellow-600">{funnelStats.clicked}</div>
+                  <div className="text-xs text-muted-foreground">Kliknęli</div>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-orange-50">
+                  <div className="text-2xl font-bold text-orange-600">{funnelStats.pendingReview}</div>
+                  <div className="text-xs text-muted-foreground">Oczekują</div>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-green-50">
+                  <div className="text-2xl font-bold text-green-600">{funnelStats.responded}</div>
+                  <div className="text-xs text-muted-foreground">Odpowiedzieli</div>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-4 mb-4">
+                <div className="flex-1">
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>Konwersja</span>
+                    <span className="font-medium">{funnelStats.conversionRate}%</span>
+                  </div>
+                  <Progress value={funnelStats.conversionRate} className="h-2" />
+                </div>
+              </div>
+
+              {funnelStats.savedCustomers > 0 && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-rose-50 border border-rose-200">
+                  <Heart className="h-5 w-5 text-rose-500" />
+                  <div>
+                    <span className="font-medium text-rose-700">{funnelStats.savedCustomers} uratowanych klientów</span>
+                    <p className="text-xs text-rose-600">Zgłosili problem zamiast zostawić negatywną opinię publiczną</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

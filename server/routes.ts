@@ -790,14 +790,16 @@ export async function registerRoutes(
       const clientDoc = snapshot.docs[0];
       const updateData: any = { status };
 
-      // If low rating (1-3), store complaint instead of going to Google
-      if (rating && rating <= 3 && complaint) {
+      // If low rating (1-3), store complaint and mark as saved customer
+      if (rating && rating <= 3) {
         updateData.lastComplaint = {
           rating,
-          message: complaint,
+          message: complaint || '',
           createdAt: new Date().toISOString(),
         };
-        updateData.status = 'CLICKED'; // Keep as CLICKED for low ratings
+        updateData.status = 'RESPONDED'; // Mark as responded (internally)
+        updateData.savedCustomer = true; // Flag for "saved" metric
+        updateData.respondedAt = new Date().toISOString();
       }
 
       await clientDoc.ref.update(updateData);
@@ -831,62 +833,14 @@ export async function registerRoutes(
       const clientDoc = snapshot.docs[0];
       const clientData = clientDoc.data();
 
-      // Get owner's Google tokens and location
-      const userDoc = await db.collection('users').doc(clientData.ownerId).get();
-      const userData = userDoc.data();
-
-      if (!userData?.googleTokens || !userData?.googleBusiness?.accountId || !userData?.googleBusiness?.locationId) {
-        // Can't verify - just mark as RESPONDED anyway (user went to Google)
-        await clientDoc.ref.update({ status: 'RESPONDED', respondedAt: new Date().toISOString() });
-        return res.json({ verified: true, method: 'assumed' });
-      }
-
-      try {
-        // Refresh token if needed
-        let accessToken = userData.googleTokens.accessToken;
-        const expiresAt = userData.googleTokens.expiresAt || 0;
-        
-        if (Date.now() > expiresAt) {
-          const newTokens = await refreshAccessToken(userData.googleTokens.refreshToken);
-          accessToken = newTokens.accessToken;
-          await db.collection('users').doc(clientData.ownerId).update({
-            'googleTokens.accessToken': newTokens.accessToken,
-            'googleTokens.expiresAt': newTokens.expiresAt,
-          });
-        }
-
-        // Check for recent reviews
-        const reviews = await getReviews(
-          accessToken,
-          userData.googleBusiness.accountId,
-          userData.googleBusiness.locationId
-        );
-
-        // Look for a review from this customer (by name match in the last 10 reviews)
-        const customerName = clientData.name?.toLowerCase() || '';
-        const recentReview = reviews.slice(0, 10).find((review: any) => {
-          const reviewerName = review.reviewer?.displayName?.toLowerCase() || '';
-          return reviewerName.includes(customerName) || customerName.includes(reviewerName);
-        });
-
-        if (recentReview) {
-          await clientDoc.ref.update({ 
-            status: 'RESPONDED', 
-            respondedAt: new Date().toISOString(),
-            reviewId: recentReview.reviewId,
-          });
-          return res.json({ verified: true, method: 'api', reviewFound: true });
-        }
-
-        // If no exact match found but user went to Google, still mark as responded
-        await clientDoc.ref.update({ status: 'RESPONDED', respondedAt: new Date().toISOString() });
-        return res.json({ verified: true, method: 'assumed', reviewFound: false });
-      } catch (apiError) {
-        console.error('Google API verification error:', apiError);
-        // Fallback: just mark as responded
-        await clientDoc.ref.update({ status: 'RESPONDED', respondedAt: new Date().toISOString() });
-        return res.json({ verified: true, method: 'fallback' });
-      }
+      // Mark as RESPONDED when user returns from Google review page
+      // We assume they completed the review since they were redirected there
+      await clientDoc.ref.update({ 
+        status: 'RESPONDED', 
+        respondedAt: new Date().toISOString(),
+      });
+      
+      res.json({ verified: true, method: 'assumed' });
     } catch (error) {
       console.error('Verify review error:', error);
       res.status(500).json({ error: 'Failed to verify review' });
@@ -922,12 +876,12 @@ export async function registerRoutes(
         switch (data.status) {
           case 'NEW': stats.new++; break;
           case 'SENT': stats.sent++; break;
-          case 'CLICKED': 
-            stats.clicked++; 
-            if (data.lastComplaint) stats.savedCustomers++;
-            break;
+          case 'CLICKED': stats.clicked++; break;
           case 'PENDING_REVIEW': stats.pendingReview++; break;
-          case 'RESPONDED': stats.responded++; break;
+          case 'RESPONDED': 
+            stats.responded++; 
+            if (data.savedCustomer) stats.savedCustomers++;
+            break;
         }
       });
 

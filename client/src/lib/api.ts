@@ -209,3 +209,10 @@ export async function deleteCampaign(id: string) {
   if (!response.ok) throw new Error('Failed to delete campaign');
   return response.json();
 }
+
+export async function fetchFunnelStats() {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/funnel-stats`, { headers });
+  if (!response.ok) throw new Error('Failed to fetch funnel stats');
+  return response.json();
+}

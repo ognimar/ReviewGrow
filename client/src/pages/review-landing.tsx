@@ -109,7 +109,7 @@ export default function ReviewLanding() {
   };
 
   const handleSubmitComplaint = async () => {
-    if (!complaint.trim() || !selectedRating) return;
+    if (!selectedRating) return;
     
     setSubmitting(true);
     try {
@@ -117,7 +117,7 @@ export default function ReviewLanding() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          status: "CLICKED",
+          status: "RESPONDED",
           rating: selectedRating,
           complaint: complaint.trim(),
         }),
@@ -229,7 +229,7 @@ export default function ReviewLanding() {
               <Button
                 className="w-full"
                 onClick={handleSubmitComplaint}
-                disabled={submitting || !complaint.trim()}
+                disabled={submitting}
                 data-testid="button-submit-complaint"
               >
                 {submitting ? (
