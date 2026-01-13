@@ -1,4 +1,4 @@
-# ReviewHarvest - Omnichannel Marketing Platform
+# Contact Review Grow - Omnichannel Marketing Platform
 
 ## Overview
 Full-stack marketing platform with personalized image generation, SMS/Email campaigns, and Stripe payments. Features a professional public landing page and smart review collection system.
@@ -104,7 +104,15 @@ subscription: {
 ## Development
 Run `npm run dev` to start the development server on port 5000.
 
+## Branding Note
+- **Contact Review Grow** = Customer-facing product/platform brand (used in UI, marketing, navigation)
+- **Review Grow** = Legal entity name (Bartosz Straszewski, NIP: 6472614652) used in policy documents
+
 ## Recent Changes
+- 2026-01-13: Added legal policy pages (Polityka Prywatności, Regulamin, Polityka Cookies)
+  - Routes: /polityka-prywatnosci, /regulamin, /polityka-cookies
+  - Full policy content from official documents
+  - Linked in landing page footer
 - 2026-01-13: Created Professional Public Landing Page
   - Reorganized routing: Landing at /, Login at /login, Dashboard at /dashboard
   - Professional landing page with emerald/teal color scheme

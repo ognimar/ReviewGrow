@@ -40,7 +40,7 @@ export default function Landing() {
               <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
                 <Star className="h-5 w-5 text-white" />
               </div>
-              <span className="text-xl font-bold text-gray-900">ReviewHarvest</span>
+              <span className="text-xl font-bold text-gray-900">Contact Review Grow</span>
             </div>
 
             {/* Desktop Menu */}
@@ -458,7 +458,7 @@ export default function Landing() {
                 <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
                   <Star className="h-5 w-5 text-white" />
                 </div>
-                <span className="text-xl font-bold text-white">ReviewHarvest</span>
+                <span className="text-xl font-bold text-white">Contact Review Grow</span>
               </div>
               <p className="text-gray-400 text-sm">
                 Automatyzacja opinii Google dla nowoczesnych firm.
@@ -475,26 +475,25 @@ export default function Landing() {
             </div>
 
             <div>
-              <h4 className="font-semibold text-white mb-4">Firma</h4>
+              <h4 className="font-semibold text-white mb-4">Kontakt</h4>
               <ul className="space-y-2">
-                <li><a href="#" className="text-gray-400 hover:text-white text-sm">O nas</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white text-sm">Kontakt</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white text-sm">Blog</a></li>
+                <li><span className="text-gray-400 text-sm">contactreviewgrow@gmail.com</span></li>
+                <li><span className="text-gray-400 text-sm">+48 884 305 622</span></li>
               </ul>
             </div>
 
             <div>
               <h4 className="font-semibold text-white mb-4">Prawne</h4>
               <ul className="space-y-2">
-                <li><a href="#" className="text-gray-400 hover:text-white text-sm">Polityka prywatności</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white text-sm">Regulamin</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white text-sm">RODO</a></li>
+                <li><Link href="/polityka-prywatnosci"><a className="text-gray-400 hover:text-white text-sm">Polityka prywatności</a></Link></li>
+                <li><Link href="/regulamin"><a className="text-gray-400 hover:text-white text-sm">Regulamin</a></Link></li>
+                <li><Link href="/polityka-cookies"><a className="text-gray-400 hover:text-white text-sm">Polityka cookies</a></Link></li>
               </ul>
             </div>
           </div>
 
           <div className="border-t border-gray-800 pt-8 text-center text-gray-400 text-sm">
-            © {new Date().getFullYear()} ReviewHarvest. Wszystkie prawa zastrzeżone.
+            © {new Date().getFullYear()} Contact Review Grow. Wszystkie prawa zastrzeżone.
           </div>
         </div>
       </footer>

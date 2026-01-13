@@ -17,6 +17,9 @@ import Settings from "@/pages/settings";
 import Login from "@/pages/login";
 import ReviewLanding from "@/pages/review-landing";
 import ReviewSuccess from "@/pages/review-success";
+import PrivacyPolicy from "@/pages/privacy-policy";
+import Terms from "@/pages/terms";
+import CookiePolicy from "@/pages/cookie-policy";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType<any> }) {
   const { user, loading } = useAuth();
@@ -45,6 +48,9 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/r/:slug" component={ReviewLanding} />
       <Route path="/success" component={ReviewSuccess} />
+      <Route path="/polityka-prywatnosci" component={PrivacyPolicy} />
+      <Route path="/regulamin" component={Terms} />
+      <Route path="/polityka-cookies" component={CookiePolicy} />
       <Route path="/" component={Landing} />
       <Route path="/dashboard">
         {() => <ProtectedRoute component={Dashboard} />}

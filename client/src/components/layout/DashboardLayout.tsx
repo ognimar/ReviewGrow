@@ -54,9 +54,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex h-16 items-center px-6 border-b border-sidebar-border">
           <div className="flex items-center gap-2 font-display font-bold text-lg text-primary">
             <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center">
-              R
+              C
             </div>
-            ReviewHarvest
+            Contact Review Grow
           </div>
         </div>
         <div className="flex-1 overflow-y-auto py-4 px-3">
@@ -144,9 +144,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
              <div className="flex h-16 items-center px-6 border-b">
               <div className="flex items-center gap-2 font-display font-bold text-lg text-primary">
                 <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center">
-                  R
+                  C
                 </div>
-                ReviewHarvest
+                Contact Review Grow
               </div>
             </div>
             <div className="flex-1 overflow-y-auto py-4 px-3">
@@ -174,7 +174,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           </SheetContent>
         </Sheet>
-        <span className="font-display font-bold ml-4">ReviewHarvest</span>
+        <span className="font-display font-bold ml-4">Contact Review Grow</span>
       </div>
 
       {/* Main Content */}
