@@ -1,7 +1,7 @@
-# Contact Review Grow - Omnichannel Marketing Platform
+# ReviewHarvest - Omnichannel Marketing Platform
 
 ## Overview
-Full-stack marketing platform with personalized image generation, SMS/Email campaigns, and Stripe payments.
+Full-stack marketing platform with personalized image generation, SMS/Email campaigns, and Stripe payments. Features a professional public landing page and smart review collection system.
 
 ## Technology Stack
 - **Frontend**: React, TailwindCSS, Wouter, TanStack Query
@@ -105,6 +105,13 @@ subscription: {
 Run `npm run dev` to start the development server on port 5000.
 
 ## Recent Changes
+- 2026-01-13: Created Professional Public Landing Page
+  - Reorganized routing: Landing at /, Login at /login, Dashboard at /dashboard
+  - Professional landing page with emerald/teal color scheme
+  - Sections: Navbar, Hero with SMS mockup, Features (6 cards), How it Works, Pricing, FAQ accordion, Footer
+  - Mobile-responsive design with hamburger menu
+  - All CTA buttons link to /login for authentication flow
+  - Updated meta tags for SEO with ReviewHarvest branding
 - 2026-01-12: Implemented Review Funnel System
   - Client status lifecycle: NEW → SENT → CLICKED → PENDING_REVIEW → RESPONDED
   - Unique 6-character tracking slugs for each client (stored in trackingSlug field)
