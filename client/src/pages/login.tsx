@@ -21,14 +21,14 @@ export default function Login() {
   useEffect(() => {
     handleGoogleRedirect().then((redirectUser) => {
       if (redirectUser) {
-        setLocation('/');
+        setLocation('/dashboard');
       }
     });
   }, [setLocation]);
 
   useEffect(() => {
     if (user) {
-      setLocation('/');
+      setLocation('/dashboard');
     }
   }, [user, setLocation]);
 
@@ -37,7 +37,7 @@ export default function Login() {
     try {
       const user = await signInWithGoogle();
       if (user) {
-        setLocation('/');
+        setLocation('/dashboard');
       }
     } catch (error: any) {
       toast({
@@ -59,7 +59,7 @@ export default function Login() {
       } else {
         await signInWithEmail(email, password);
       }
-      setLocation('/');
+      setLocation('/dashboard');
     } catch (error: any) {
       toast({
         title: isSignUp ? 'Sign up failed' : 'Sign in failed',

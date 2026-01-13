@@ -18,7 +18,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchStats } from "@/lib/api";
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Clients', href: '/clients', icon: Users },
   { name: 'Campaigns', href: '/campaigns', icon: Send },
   { name: 'Templates', href: '/templates', icon: ImageIcon },

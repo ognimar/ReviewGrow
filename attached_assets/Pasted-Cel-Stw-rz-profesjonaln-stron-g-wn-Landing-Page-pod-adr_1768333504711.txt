@@ -1,0 +1,51 @@
+Cel: Stwórz profesjonalną stronę główną (Landing Page) pod adresem / i przenieś obecny panel logowania na trasę /login. Strona musi być wzorowana na estetyce reviewharvest.com.
+
+1. Reorganizacja Routingu:
+
+    Strona Główna (/): Publiczny Landing Page.
+
+    Logowanie (/login lub /auth): Przenieś tutaj obecny formularz logowania Firebase.
+
+    Dashboard (/dashboard): Dostępny tylko po zalogowaniu (Protected Route).
+
+2. Struktura Landing Page (Sekcje): Zaimplementuj następujące sekcje, używając Tailwind CSS dla uzyskania nowoczesnego, "napowietrzonego" wyglądu:
+
+    Navbar: Logo (ReviewHarvest), linki (Funkcje, Cennik, FAQ) oraz przycisk "Zaloguj się" i "Zacznij teraz".
+
+    Hero Section: * Nagłówek: "Zdobądź 5-gwiazdkowe opinie w Google automatycznie".
+
+        Sub-header: "Inteligentny system SMS, który filtruje opinie, automatyzuje odpowiedzi AI i buduje Twoją reputację online".
+
+        CTA: Duży przycisk "Wypróbuj teraz" (prowadzi do /login).
+
+        Grafika: Render okna SMS z Twoim lejkiem (pamiętasz filmik? Pokaż tam ten "Review Gate").
+
+    Features (3 kolumny):
+
+        Inteligentne Filtrowanie: "Zatrzymaj negatywne opinie, zanim trafią do Google".
+
+        Automatyzacja AI: "Szybkie i unikalne odpowiedzi na każdą recenzję dzięki Gemini AI".
+
+        Weryfikacja Konwersji: "Wiemy dokładnie, kiedy klient wystawił opinię dzięki naszemu systemowi redirectów".
+
+    How it Works (Kroki): 1. Importujesz listę -> 2. Wysyłasz kampanię -> 3. System weryfikuje opinię -> 4. Cieszysz się wzrostem w Google.
+
+    Pricing Table (Zgodnie z naszymi ustaleniami):
+
+        Trzy karty: Starter (119 PLN), Growth (199 PLN), Pro (399 PLN).
+
+        Każda karta musi mieć listę benefitów i przycisk "Wybierz plan".
+
+    Footer: Linki prawne (Privacy, Terms), Social media i kontakt.
+
+3. Design & UX:
+
+    Kolorystyka: Biel, jasne szarości i jeden dominujący kolor akcentowy (np. profesjonalny granat lub zieleń).
+
+    Responsywność: Strona musi wyglądać idealnie na telefonach (bo tam klienci będą klikać w linki z Twoich nagrań).
+
+    Animacje: Dodaj subtelne efekty hover na przyciskach i kartach cennika.
+
+4. Integracja z logiką aplikacji:
+
+    Przyciski "Get Started" powinny kierować do rejestracji, a po udanym procesie użytkownik powinien trafiać bezpośrednio do Dashboardu, który już mamy.

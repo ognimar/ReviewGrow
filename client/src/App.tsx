@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import NotFound from "@/pages/not-found";
+import Landing from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
 import Clients from "@/pages/clients";
 import Campaigns from "@/pages/campaigns";
@@ -44,7 +45,8 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/r/:slug" component={ReviewLanding} />
       <Route path="/success" component={ReviewSuccess} />
-      <Route path="/">
+      <Route path="/" component={Landing} />
+      <Route path="/dashboard">
         {() => <ProtectedRoute component={Dashboard} />}
       </Route>
       <Route path="/clients">
