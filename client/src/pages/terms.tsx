@@ -33,10 +33,10 @@ export default function Terms() {
 
           <section className="mb-8">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">§ 1. POSTANOWIENIA OGÓLNE I DANE USŁUGODAWCY</h2>
-            <p className="text-gray-600 mb-4">1.1. Niniejszy Regulamin określa zasady świadczenia usług drogą elektroniczną przez Usługodawcę na rzecz Klientów za pośrednictwem platformy Review Grow.</p>
+            <p className="text-gray-600 mb-4">1.1. Niniejszy Regulamin określa zasady świadczenia usług drogą elektroniczną przez Usługodawcę na rzecz Klientów za pośrednictwem platformy Contact Review Grow.</p>
             
             <div className="bg-gray-50 p-4 rounded-lg mb-4">
-              <p className="text-gray-700"><strong>Usługodawca:</strong> Bartosz Straszewski, prowadzący działalność gospodarczą pod firmą Review Grow</p>
+              <p className="text-gray-700"><strong>Usługodawca:</strong> Bartosz Straszewski, prowadzący działalność gospodarczą pod firmą Contact Review Grow</p>
               <p className="text-gray-700"><strong>Adres siedziby:</strong> ul. Wodzisławska 58a, 44-352 Czyżowice, Polska</p>
               <p className="text-gray-700"><strong>NIP:</strong> 6472614652</p>
               <p className="text-gray-700"><strong>REGON:</strong> 542507328</p>
@@ -51,7 +51,7 @@ export default function Terms() {
           <section className="mb-8">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">§ 2. DEFINICJE</h2>
             <ul className="list-disc pl-6 space-y-2 text-gray-600">
-              <li><strong>Usługodawca / Review Grow:</strong> Bartosz Straszewski prowadzący działalność gospodarczą pod firmą Review Grow, świadczący usługi opisane w niniejszym Regulaminie.</li>
+              <li><strong>Usługodawca / Contact Review Grow:</strong> Bartosz Straszewski prowadzący działalność gospodarczą pod firmą Contact Review Grow, świadczący usługi opisane w niniejszym Regulaminie.</li>
               <li><strong>Klient:</strong> osoba fizyczna prowadząca działalność gospodarczą, osoba prawna lub jednostka organizacyjna nieposiadająca osobowości prawnej, która zawarła umowę o świadczenie Usług z Usługodawcą.</li>
               <li><strong>Użytkownik Końcowy:</strong> osoba fizyczna będąca klientem, kontrahentem lub usługobiorcą Klienta, której dane kontaktowe zostały przekazane Usługodawcy w celu wysłania zaproszeń do wystawienia opinii w imieniu Klienta.</li>
               <li><strong>Usługi:</strong> usługi świadczone przez Usługodawcę na rzecz Klienta, obejmujące w szczególności automatyczne wysyłanie zaproszeń do wystawienia opinii (SMS, e-mail), integracje z platformami zewnętrznymi, monitorowanie opinii oraz inne funkcjonalności dostępne w ramach Platformy.</li>
@@ -212,7 +212,7 @@ export default function Terms() {
           <section className="mb-8">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">§ 11. DANE KONTAKTOWE</h2>
             <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-gray-700"><strong>Review Grow</strong></p>
+              <p className="text-gray-700"><strong>Contact Review Grow</strong></p>
               <p className="text-gray-700">Bartosz Straszewski</p>
               <p className="text-gray-700">ul. Wodzisławska 58a</p>
               <p className="text-gray-700">44-352 Czyżowice, Polska</p>
@@ -223,7 +223,7 @@ export default function Terms() {
             </div>
           </section>
 
-          <p className="text-gray-500 text-sm text-center mt-12">© Review Grow. Wszelkie prawa zastrzeżone.</p>
+          <p className="text-gray-500 text-sm text-center mt-12">© Contact Review Grow. Wszelkie prawa zastrzeżone.</p>
         </div>
       </main>
     </div>

@@ -105,8 +105,7 @@ subscription: {
 Run `npm run dev` to start the development server on port 5000.
 
 ## Branding Note
-- **Contact Review Grow** = Customer-facing product/platform brand (used in UI, marketing, navigation)
-- **Review Grow** = Legal entity name (Bartosz Straszewski, NIP: 6472614652) used in policy documents
+- **Contact Review Grow** = Official business name (Bartosz Straszewski, NIP: 6472614652) used everywhere in the platform
 
 ## Recent Changes
 - 2026-01-13: Added legal policy pages (Polityka Prywatności, Regulamin, Polityka Cookies)

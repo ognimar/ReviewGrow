@@ -34,10 +34,10 @@ export default function PrivacyPolicy() {
           <section className="mb-8">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">1. ADMINISTRATOR DANYCH OSOBOWYCH</h2>
             <p className="text-gray-600 mb-4">
-              Niniejsza Polityka Prywatności określa zasady przetwarzania i ochrony danych osobowych w związku z korzystaniem z usług Review Grow.
+              Niniejsza Polityka Prywatności określa zasady przetwarzania i ochrony danych osobowych w związku z korzystaniem z usług Contact Review Grow.
             </p>
             <div className="bg-gray-50 p-4 rounded-lg mb-4">
-              <p className="text-gray-700"><strong>Administrator danych:</strong> Bartosz Straszewski, prowadzący działalność gospodarczą pod firmą Review Grow</p>
+              <p className="text-gray-700"><strong>Administrator danych:</strong> Bartosz Straszewski, prowadzący działalność gospodarczą pod firmą Contact Review Grow</p>
               <p className="text-gray-700"><strong>Adres siedziby:</strong> ul. Wodzisławska 58a, 44-352 Czyżowice, Polska</p>
               <p className="text-gray-700"><strong>NIP:</strong> 6472614652</p>
               <p className="text-gray-700"><strong>REGON:</strong> 542507328</p>
@@ -54,12 +54,12 @@ export default function PrivacyPolicy() {
             <ul className="list-disc pl-6 space-y-2 text-gray-600">
               <li><strong>Dane osobowe:</strong> wszelkie informacje dotyczące zidentyfikowanej lub możliwej do zidentyfikowania osoby fizycznej.</li>
               <li><strong>Przetwarzanie:</strong> operacja lub zestaw operacji wykonywanych na danych osobowych, takich jak zbieranie, utrwalanie, przechowywanie, modyfikowanie, udostępnianie lub usuwanie.</li>
-              <li><strong>Administrator:</strong> Bartosz Straszewski / Review Grow - podmiot decydujący o celach i sposobach przetwarzania danych osobowych.</li>
+              <li><strong>Administrator:</strong> Bartosz Straszewski / Contact Review Grow - podmiot decydujący o celach i sposobach przetwarzania danych osobowych.</li>
               <li><strong>Podmiot przetwarzający (Procesor):</strong> podmiot przetwarzający dane osobowe w imieniu Administratora.</li>
               <li><strong>Osoba, której dane dotyczą:</strong> osoba fizyczna, której dane osobowe są przetwarzane przez Administratora.</li>
-              <li><strong>Użytkownik/Klient:</strong> osoba fizyczna lub prawna korzystająca z Usług Review Grow.</li>
+              <li><strong>Użytkownik/Klient:</strong> osoba fizyczna lub prawna korzystająca z Usług Contact Review Grow.</li>
               <li><strong>Użytkownik Końcowy:</strong> osoba fizyczna będąca klientem Klienta, której dane kontaktowe są przetwarzane w celu wysłania zaproszeń do wystawienia opinii.</li>
-              <li><strong>Usługi:</strong> usługi świadczone przez Review Grow, w tym automatyczne wysyłanie zaproszeń do wystawiania opinii, monitorowanie reputacji online i powiązane funkcjonalności.</li>
+              <li><strong>Usługi:</strong> usługi świadczone przez Contact Review Grow, w tym automatyczne wysyłanie zaproszeń do wystawiania opinii, monitorowanie reputacji online i powiązane funkcjonalności.</li>
             </ul>
           </section>
 
@@ -218,7 +218,7 @@ export default function PrivacyPolicy() {
           <section className="mb-8">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">10. DANE KONTAKTOWE</h2>
             <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-gray-700"><strong>Review Grow</strong></p>
+              <p className="text-gray-700"><strong>Contact Review Grow</strong></p>
               <p className="text-gray-700">Bartosz Straszewski</p>
               <p className="text-gray-700">ul. Wodzisławska 58a</p>
               <p className="text-gray-700">44-352 Czyżowice, Polska</p>
@@ -229,7 +229,7 @@ export default function PrivacyPolicy() {
             </div>
           </section>
 
-          <p className="text-gray-500 text-sm text-center mt-12">© Review Grow. Wszelkie prawa zastrzeżone.</p>
+          <p className="text-gray-500 text-sm text-center mt-12">© Contact Review Grow. Wszelkie prawa zastrzeżone.</p>
         </div>
       </main>
     </div>

@@ -34,10 +34,10 @@ export default function CookiePolicy() {
           <section className="mb-8">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">1. INFORMACJE OGÓLNE</h2>
             <p className="text-gray-600 mb-4">
-              Niniejsza Polityka plików cookie wyjaśnia, w jaki sposób Review Grow wykorzystuje pliki cookie i podobne technologie podczas odwiedzania naszej strony internetowej oraz korzystania z naszych usług.
+              Niniejsza Polityka plików cookie wyjaśnia, w jaki sposób Contact Review Grow wykorzystuje pliki cookie i podobne technologie podczas odwiedzania naszej strony internetowej oraz korzystania z naszych usług.
             </p>
             <div className="bg-gray-50 p-4 rounded-lg mb-4">
-              <p className="text-gray-700"><strong>Administrator:</strong> Bartosz Straszewski, prowadzący działalność gospodarczą pod firmą Review Grow</p>
+              <p className="text-gray-700"><strong>Administrator:</strong> Bartosz Straszewski, prowadzący działalność gospodarczą pod firmą Contact Review Grow</p>
               <p className="text-gray-700"><strong>Adres siedziby:</strong> ul. Wodzisławska 58a, 44-352 Czyżowice, Polska</p>
               <p className="text-gray-700"><strong>NIP:</strong> 6472614652</p>
               <p className="text-gray-700"><strong>REGON:</strong> 542507328</p>
@@ -54,7 +54,7 @@ export default function CookiePolicy() {
             </p>
             
             <h3 className="text-lg font-medium text-gray-800 mb-3">2.1. Własne pliki cookie</h3>
-            <p className="text-gray-600 mb-4">Pliki cookie ustawiane przez właściciela strony (Review Grow) nazywane są własnymi plikami cookie (first-party cookies). Służą one głównie do zapewnienia prawidłowego funkcjonowania strony i zapamiętywania preferencji użytkownika.</p>
+            <p className="text-gray-600 mb-4">Pliki cookie ustawiane przez właściciela strony (Contact Review Grow) nazywane są własnymi plikami cookie (first-party cookies). Służą one głównie do zapewnienia prawidłowego funkcjonowania strony i zapamiętywania preferencji użytkownika.</p>
 
             <h3 className="text-lg font-medium text-gray-800 mb-3">2.2. Pliki cookie podmiotów trzecich</h3>
             <p className="text-gray-600">Pliki cookie ustawiane przez podmioty inne niż właściciel strony nazywane są plikami cookie podmiotów trzecich (third-party cookies). Umożliwiają one dostarczanie dodatkowych funkcji, takich jak analityka, reklamy czy integracje z mediami społecznościowymi.</p>
@@ -256,7 +256,7 @@ export default function CookiePolicy() {
           <section className="mb-8">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">11. DANE KONTAKTOWE</h2>
             <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-gray-700"><strong>Review Grow</strong></p>
+              <p className="text-gray-700"><strong>Contact Review Grow</strong></p>
               <p className="text-gray-700">Bartosz Straszewski</p>
               <p className="text-gray-700">ul. Wodzisławska 58a</p>
               <p className="text-gray-700">44-352 Czyżowice, Polska</p>
@@ -267,7 +267,7 @@ export default function CookiePolicy() {
             </div>
           </section>
 
-          <p className="text-gray-500 text-sm text-center mt-12">© Review Grow. Wszelkie prawa zastrzeżone.</p>
+          <p className="text-gray-500 text-sm text-center mt-12">© Contact Review Grow. Wszelkie prawa zastrzeżone.</p>
         </div>
       </main>
     </div>
