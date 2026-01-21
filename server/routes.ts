@@ -501,8 +501,16 @@ export async function registerRoutes(
         : 'http://localhost:5000';
 
       for (const client of clients) {
-        // Generate unique tracking link for this client
-        const trackingLink = client.trackingSlug ? `${baseUrl}/r/${client.trackingSlug}` : googleReviewLink;
+        // Ensure client has a tracking slug (generate if missing for older clients)
+        let trackingSlug = client.trackingSlug;
+        if (!trackingSlug) {
+          trackingSlug = generateTrackingSlug();
+          // Update client with new tracking slug
+          await db.collection('clients').doc(client.id).update({ trackingSlug });
+        }
+        
+        // Always use short tracking link - never include external URLs in SMS (SMSAPI blocks them)
+        const trackingLink = `${baseUrl}/r/${trackingSlug}`;
         
         let personalizedMessage = campaign.message
           .replace(/\{\{name\}\}/g, client.name || 'Customer')

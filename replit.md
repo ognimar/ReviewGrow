@@ -108,6 +108,10 @@ Run `npm run dev` to start the development server on port 5000.
 - **Contact Review Grow** = Official business name (Bartosz Straszewski, NIP: 6472614652) used everywhere in the platform
 
 ## Recent Changes
+- 2026-01-21: Fixed SMSAPI link rejection and Google Business Profile isolation
+  - Campaign sending now generates tracking slugs for older clients that don't have them
+  - Always uses short /r/:slug tracking links instead of full Google URLs (SMSAPI blocks external links)
+  - Added query cache clearing on logout to prevent user data leaking between sessions
 - 2026-01-13: Added legal policy pages (Polityka Prywatności, Regulamin, Polityka Cookies)
   - Routes: /polityka-prywatnosci, /regulamin, /polityka-cookies
   - Full policy content from official documents
