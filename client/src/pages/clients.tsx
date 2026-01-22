@@ -2,10 +2,11 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Upload, FileDown, Search, Loader2, Users, Pencil, Trash2 } from "lucide-react";
+import { Upload, FileDown, Search, Loader2, Users, Pencil, Trash2, Heart, MessageCircle, Star } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -21,6 +22,12 @@ interface Client {
   status?: 'NEW' | 'SENT' | 'CLICKED' | 'PENDING_REVIEW' | 'RESPONDED';
   createdAt: string;
   lastSentAt?: string;
+  savedCustomer?: boolean;
+  lastComplaint?: {
+    rating: number;
+    message: string;
+    createdAt: string;
+  };
 }
 
 function StatusBadge({ status }: { status?: string }) {
@@ -52,6 +59,7 @@ export default function Clients() {
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editEmail, setEditEmail] = useState("");
+  const [viewingComplaint, setViewingComplaint] = useState<Client | null>(null);
 
   const { data: clients = [], isLoading } = useQuery<Client[]>({
     queryKey: ['clients'],
@@ -268,7 +276,29 @@ export default function Clients() {
                       <TableCell>{client.phone || '-'}</TableCell>
                       <TableCell>{client.email || '-'}</TableCell>
                       <TableCell>
-                        <StatusBadge status={client.status} />
+                        <div className="flex items-center gap-2">
+                          <StatusBadge status={client.status} />
+                          {client.savedCustomer && client.lastComplaint && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-rose-500 hover:text-rose-600"
+                                    onClick={() => setViewingComplaint(client)}
+                                    data-testid={`button-view-complaint-${client.id}`}
+                                  >
+                                    <Heart className="h-4 w-4 fill-current" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Uratowany klient - kliknij aby zobaczyć skargę</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         {client.createdAt ? format(new Date(client.createdAt), 'MMM d, yyyy') : '-'}
@@ -353,6 +383,54 @@ export default function Clients() {
               Save Changes
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!viewingComplaint} onOpenChange={(open) => !open && setViewingComplaint(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Heart className="h-5 w-5 text-rose-500 fill-current" />
+              Uratowany Klient
+            </DialogTitle>
+            <DialogDescription>
+              Ten klient zostawił negatywną opinię, która została przechwycona zamiast trafiać na Google.
+            </DialogDescription>
+          </DialogHeader>
+          {viewingComplaint?.lastComplaint && (
+            <div className="space-y-4 py-4">
+              <div className="bg-muted/50 rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">{viewingComplaint.name}</span>
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star
+                        key={star}
+                        className={`h-4 w-4 ${
+                          star <= viewingComplaint.lastComplaint!.rating
+                            ? 'text-yellow-400 fill-current'
+                            : 'text-gray-300'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {format(new Date(viewingComplaint.lastComplaint.createdAt), 'd MMM yyyy, HH:mm')}
+                </div>
+                {viewingComplaint.lastComplaint.message ? (
+                  <div className="bg-white dark:bg-gray-800 rounded p-3 border">
+                    <p className="text-sm whitespace-pre-wrap">{viewingComplaint.lastComplaint.message}</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">Brak wiadomości - tylko ocena</p>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Kontakt: {viewingComplaint.phone || viewingComplaint.email || 'Brak danych'}
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </DashboardLayout>
