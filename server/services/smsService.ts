@@ -100,6 +100,9 @@ export async function sendMMS(
       format: 'json',
     });
 
+    console.log('SMSAPI MMS request to:', SMSAPI_MMS_URL);
+    console.log('SMSAPI token present:', !!token);
+    
     const response = await fetch(`${SMSAPI_MMS_URL}?${params.toString()}`, {
       method: 'POST',
       headers: {
@@ -108,6 +111,7 @@ export async function sendMMS(
     });
 
     const data = await response.json();
+    console.log('SMSAPI MMS response:', JSON.stringify(data));
 
     if (data.error) {
       console.error('SMSAPI MMS error:', data.error, data.message);
@@ -115,6 +119,7 @@ export async function sendMMS(
     }
 
     if (data.list && data.list.length > 0) {
+      console.log('SMSAPI MMS success, messageId:', data.list[0].id);
       return { success: true, messageId: data.list[0].id };
     }
 
