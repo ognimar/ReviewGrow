@@ -108,6 +108,17 @@ Run `npm run dev` to start the development server on port 5000.
 - **Contact Review Grow** = Official business name (Bartosz Straszewski, NIP: 6472614652) used everywhere in the platform
 
 ## Recent Changes
+- 2026-01-24: Added Automatic Follow-up SMS feature
+  - Up to 5 configurable follow-up messages per user
+  - Each message has: enabled toggle, days after (1-30), message content
+  - Scheduler runs every hour to check and send due follow-ups
+  - Only sends to clients with SENT or CLICKED status (not RESPONDED)
+  - UI in Settings page for configuration
+  - "Wyślij Teraz" button for manual trigger
+  - Tracks followUpsSent count per client to prevent duplicate sends
+- 2026-01-22: Added complaint viewing for saved customers
+  - Heart icon on clients page for customers who left negative ratings
+  - Click to view rating, message and date of complaint
 - 2026-01-21: Fixed SMSAPI link rejection and Google Business Profile isolation
   - Campaign sending now generates tracking slugs for older clients that don't have them
   - Always uses short /r/:slug tracking links instead of full Google URLs (SMSAPI blocks external links)

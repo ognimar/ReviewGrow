@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startAutoReplyScheduler } from "./services/reviewAutoReplyScheduler";
+import { startFollowUpScheduler } from "./services/followUpScheduler";
 
 const app = express();
 const httpServer = createServer(app);
@@ -97,6 +98,9 @@ app.use((req, res, next) => {
       
       // Start the auto-reply scheduler for Google reviews
       startAutoReplyScheduler();
+      
+      // Start the follow-up SMS scheduler
+      startFollowUpScheduler();
     },
   );
 })();

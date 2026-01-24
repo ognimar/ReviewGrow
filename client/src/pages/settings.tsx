@@ -7,7 +7,8 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2, Link2, Unlink, MapPin, Star, ExternalLink, Building2, Bot, Sparkles, Play } from "lucide-react";
+import { Loader2, Link2, Unlink, MapPin, Star, ExternalLink, Building2, Bot, Sparkles, Play, MessageSquare, Clock, Send } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -18,6 +19,17 @@ interface AutoReplySettings {
   enabled: boolean;
   minStars: number;
   instructions: string;
+}
+
+interface FollowUpMessage {
+  enabled: boolean;
+  daysAfter: number;
+  message: string;
+}
+
+interface FollowUpSettings {
+  enabled: boolean;
+  messages: FollowUpMessage[];
 }
 
 interface GoogleStatus {
@@ -60,6 +72,15 @@ export default function Settings() {
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(false);
   const [minStars, setMinStars] = useState(4);
   const [aiInstructions, setAiInstructions] = useState("");
+  
+  const [followUpEnabled, setFollowUpEnabled] = useState(false);
+  const [followUpMessages, setFollowUpMessages] = useState<FollowUpMessage[]>(
+    Array(5).fill(null).map((_, i) => ({
+      enabled: false,
+      daysAfter: (i + 1) * 3,
+      message: '',
+    }))
+  );
 
   useEffect(() => {
     if (location.includes('connected=google')) {
@@ -195,6 +216,80 @@ export default function Settings() {
       setAiInstructions(autoReplySettings.instructions);
     }
   }, [autoReplySettings]);
+
+  const { data: followUpSettings, isLoading: followUpLoading } = useQuery<FollowUpSettings>({
+    queryKey: ['follow-up-settings'],
+    queryFn: async () => {
+      const response = await fetch('/api/follow-up/settings', {
+        headers: { 'Authorization': `Bearer ${await user?.getIdToken()}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch settings');
+      return response.json();
+    },
+  });
+
+  useEffect(() => {
+    if (followUpSettings) {
+      setFollowUpEnabled(followUpSettings.enabled);
+      if (followUpSettings.messages?.length) {
+        setFollowUpMessages(followUpSettings.messages);
+      }
+    }
+  }, [followUpSettings]);
+
+  const saveFollowUpMutation = useMutation({
+    mutationFn: async (settings: FollowUpSettings) => {
+      const response = await fetch('/api/follow-up/settings', {
+        method: 'PUT',
+        headers: { 
+          'Authorization': `Bearer ${await user?.getIdToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settings),
+      });
+      if (!response.ok) throw new Error('Failed to save settings');
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Ustawienia follow-up zapisane!' });
+      queryClient.invalidateQueries({ queryKey: ['follow-up-settings'] });
+    },
+    onError: () => {
+      toast({ title: 'Nie udało się zapisać ustawień', variant: 'destructive' });
+    },
+  });
+
+  const processFollowUpMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/follow-up/process', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${await user?.getIdToken()}` },
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to process follow-ups');
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (data.sent > 0) {
+        toast({ title: `Wysłano ${data.sent} follow-up SMS` });
+      } else {
+        toast({ title: `Brak klientów do wysłania follow-up (sprawdzono: ${data.eligible})` });
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: error.message || 'Nie udało się wysłać follow-up', variant: 'destructive' });
+    },
+  });
+
+  const updateFollowUpMessage = (index: number, field: keyof FollowUpMessage, value: any) => {
+    setFollowUpMessages(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
 
   const saveAutoReplyMutation = useMutation({
     mutationFn: async (settings: AutoReplySettings) => {
@@ -609,6 +704,130 @@ export default function Settings() {
             </CardContent>
           </Card>
         )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 text-primary" />
+              Automatyczne Follow-up SMS
+            </CardTitle>
+            <CardDescription>
+              Automatycznie wysyłaj przypomnienia do klientów, którzy nie zostawili jeszcze opinii.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {followUpLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="follow-up-toggle">Włącz automatyczne follow-up</Label>
+                    <p className="text-sm text-muted-foreground">
+                      System automatycznie wyśle przypomnienia w ustawionych terminach
+                    </p>
+                  </div>
+                  <Switch
+                    id="follow-up-toggle"
+                    checked={followUpEnabled}
+                    onCheckedChange={setFollowUpEnabled}
+                    data-testid="switch-follow-up"
+                  />
+                </div>
+
+                <div className="space-y-4">
+                  <Label>Konfiguracja wiadomości follow-up (do 5)</Label>
+                  
+                  {followUpMessages.map((msg, index) => (
+                    <div key={index} className="border rounded-lg p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={msg.enabled ? "default" : "secondary"}>
+                            Follow-up #{index + 1}
+                          </Badge>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Clock className="h-4 w-4" />
+                            <span>po</span>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={30}
+                              value={msg.daysAfter}
+                              onChange={(e) => updateFollowUpMessage(index, 'daysAfter', parseInt(e.target.value) || 1)}
+                              className="w-16 h-8"
+                              data-testid={`input-days-${index}`}
+                            />
+                            <span>dniach</span>
+                          </div>
+                        </div>
+                        <Switch
+                          checked={msg.enabled}
+                          onCheckedChange={(checked) => updateFollowUpMessage(index, 'enabled', checked)}
+                          data-testid={`switch-followup-${index}`}
+                        />
+                      </div>
+                      
+                      <Textarea
+                        placeholder={`Treść przypomnienia #${index + 1}... Użyj {{name}} i {{google_link}}`}
+                        value={msg.message}
+                        onChange={(e) => updateFollowUpMessage(index, 'message', e.target.value)}
+                        rows={2}
+                        disabled={!msg.enabled}
+                        className={!msg.enabled ? 'opacity-50' : ''}
+                        data-testid={`textarea-followup-${index}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => saveFollowUpMutation.mutate({
+                      enabled: followUpEnabled,
+                      messages: followUpMessages,
+                    })}
+                    disabled={saveFollowUpMutation.isPending}
+                    data-testid="button-save-follow-up"
+                  >
+                    {saveFollowUpMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    Zapisz Ustawienia
+                  </Button>
+
+                  {followUpEnabled && (
+                    <Button
+                      variant="outline"
+                      onClick={() => processFollowUpMutation.mutate()}
+                      disabled={processFollowUpMutation.isPending}
+                      data-testid="button-process-follow-ups"
+                    >
+                      {processFollowUpMutation.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="mr-2 h-4 w-4" />
+                      )}
+                      Wyślij Teraz
+                    </Button>
+                  )}
+                </div>
+
+                <div className="bg-muted/50 rounded-lg p-4 text-sm">
+                  <p className="font-medium mb-2">Jak to działa:</p>
+                  <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                    <li>Follow-up wysyłany jest tylko do klientów ze statusem SENT lub CLICKED</li>
+                    <li>Klienci którzy odpowiedzieli (RESPONDED) są pomijani</li>
+                    <li>Dni liczone są od daty wysłania pierwszego SMS</li>
+                    <li>Użyj {"{{name}}"} i {"{{google_link}}"} w treści wiadomości</li>
+                    <li>System sprawdza i wysyła follow-upy co godzinę</li>
+                  </ul>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );

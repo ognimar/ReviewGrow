@@ -1778,5 +1778,152 @@ export async function registerRoutes(
     }
   });
 
+  // Get follow-up settings
+  app.get("/api/follow-up/settings", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const userDoc = await db.collection('users').doc(req.user!.uid).get();
+      const userData = userDoc.data();
+
+      const defaultMessages = Array(5).fill(null).map((_, i) => ({
+        enabled: false,
+        daysAfter: (i + 1) * 3,
+        message: '',
+      }));
+
+      const rawSettings = userData?.followUpSettings || { enabled: false, messages: [] };
+      
+      const normalizedMessages = Array(5).fill(null).map((_, i) => {
+        const msg = rawSettings.messages?.[i];
+        return {
+          enabled: !!msg?.enabled,
+          daysAfter: (typeof msg?.daysAfter === 'number' && msg.daysAfter > 0) ? msg.daysAfter : (i + 1) * 3,
+          message: typeof msg?.message === 'string' ? msg.message : '',
+        };
+      });
+
+      res.json({
+        enabled: !!rawSettings.enabled,
+        messages: normalizedMessages,
+      });
+    } catch (error) {
+      console.error('Get follow-up settings error:', error);
+      res.status(500).json({ error: 'Failed to fetch settings' });
+    }
+  });
+
+  // Update follow-up settings
+  app.put("/api/follow-up/settings", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const { enabled, messages } = req.body;
+
+      if (!Array.isArray(messages) || messages.length > 5) {
+        return res.status(400).json({ error: 'Invalid messages format' });
+      }
+
+      const validatedMessages = messages.slice(0, 5).map((msg: any) => ({
+        enabled: !!msg.enabled,
+        daysAfter: Math.max(1, Math.min(30, parseInt(msg.daysAfter) || 3)),
+        message: (msg.message || '').slice(0, 500),
+      }));
+
+      await db.collection('users').doc(req.user!.uid).update({
+        followUpSettings: {
+          enabled: !!enabled,
+          messages: validatedMessages,
+        },
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Update follow-up settings error:', error);
+      res.status(500).json({ error: 'Failed to update settings' });
+    }
+  });
+
+  // Manually trigger follow-up processing for current user
+  app.post("/api/follow-up/process", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const userDoc = await db.collection('users').doc(req.user!.uid).get();
+      const userData = userDoc.data();
+
+      if (!userData?.followUpSettings?.enabled) {
+        return res.status(400).json({ error: 'Follow-up nie jest włączony' });
+      }
+
+      const baseUrl = `https://${req.get('host')}`;
+
+      const clientsSnapshot = await db.collection('clients')
+        .where('ownerId', '==', req.user!.uid)
+        .where('status', 'in', ['SENT', 'CLICKED'])
+        .get();
+
+      let sent = 0;
+      let failed = 0;
+      const now = Date.now();
+
+      for (const clientDoc of clientsSnapshot.docs) {
+        const client = clientDoc.data();
+        if (!client.lastSentAt || !client.phone) continue;
+
+        const lastSentDate = new Date(client.lastSentAt).getTime();
+        const followUpsSent = client.followUpsSent || 0;
+        const messages = userData.followUpSettings.messages || [];
+
+        for (let i = followUpsSent; i < messages.length; i++) {
+          const followUp = messages[i];
+          if (!followUp.enabled || !followUp.message) continue;
+
+          const triggerDate = lastSentDate + (followUp.daysAfter * 24 * 60 * 60 * 1000);
+          
+          if (now >= triggerDate) {
+            let trackingSlug = client.trackingSlug;
+            if (!trackingSlug) {
+              trackingSlug = Math.random().toString(36).substring(2, 8);
+              await clientDoc.ref.update({ trackingSlug });
+            }
+
+            const trackingLink = `${baseUrl}/r/${trackingSlug}`;
+            let personalizedMessage = followUp.message
+              .replace(/\{\{name\}\}/g, client.name || 'Klient')
+              .replace(/\{\{google_link\}\}/g, trackingLink);
+
+            const result = await sendSMS(client.phone, personalizedMessage);
+
+            if (result.success) {
+              await clientDoc.ref.update({
+                followUpsSent: i + 1,
+                lastFollowUpAt: new Date().toISOString(),
+              });
+              sent++;
+            } else {
+              failed++;
+            }
+            break;
+          }
+        }
+      }
+
+      res.json({ success: true, sent, failed, eligible: clientsSnapshot.size });
+    } catch (error: any) {
+      console.error('Process follow-ups error:', error);
+      res.status(500).json({ error: error.message || 'Failed to process follow-ups' });
+    }
+  });
+
   return httpServer;
 }
