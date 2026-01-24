@@ -776,22 +776,26 @@ export default function Settings() {
                 </div>
 
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <Label>Konfiguracja wiadomości follow-up (do 5)</Label>
-                    {sentCampaigns.length > 0 && (
-                      <Select value={selectedCampaignId} onValueChange={handleCampaignSelect}>
-                        <SelectTrigger className="w-56 h-8 text-sm" data-testid="select-campaign">
-                          <SelectValue placeholder="Kopiuj z kampanii..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {sentCampaigns.map((campaign) => (
+                    <Select value={selectedCampaignId} onValueChange={handleCampaignSelect}>
+                      <SelectTrigger className="w-56 h-8 text-sm" data-testid="select-campaign">
+                        <SelectValue placeholder="Kopiuj z kampanii..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sentCampaigns.length > 0 ? (
+                          sentCampaigns.map((campaign) => (
                             <SelectItem key={campaign.id} value={campaign.id}>
                               {campaign.name}
                             </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
+                          ))
+                        ) : (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                            Brak wysłanych kampanii
+                          </div>
+                        )}
+                      </SelectContent>
+                    </Select>
                   </div>
                   
                   {followUpMessages.map((msg, index) => (
