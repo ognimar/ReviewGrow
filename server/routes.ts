@@ -1809,6 +1809,7 @@ export async function registerRoutes(
       res.json({
         enabled: !!rawSettings.enabled,
         messages: normalizedMessages,
+        templateId: rawSettings.templateId || null,
       });
     } catch (error) {
       console.error('Get follow-up settings error:', error);
@@ -1824,7 +1825,7 @@ export async function registerRoutes(
         return res.status(503).json({ error: 'Database not available' });
       }
 
-      const { enabled, messages } = req.body;
+      const { enabled, messages, templateId } = req.body;
 
       if (!Array.isArray(messages) || messages.length > 5) {
         return res.status(400).json({ error: 'Invalid messages format' });
@@ -1840,6 +1841,7 @@ export async function registerRoutes(
         followUpSettings: {
           enabled: !!enabled,
           messages: validatedMessages,
+          templateId: templateId || null,
         },
       });
 

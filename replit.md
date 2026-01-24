@@ -116,6 +116,9 @@ Run `npm run dev` to start the development server on port 5000.
   - UI in Settings page for configuration
   - "Wyślij Teraz" button for manual trigger
   - Tracks followUpsSent count per client to prevent duplicate sends
+  - **Quick copy from campaign**: Select a sent campaign to auto-copy its message and template
+  - **Image support**: Follow-ups use the same personalized image template as the original campaign
+  - Uses {{image}} tag to include personalized MMS images
 - 2026-01-22: Added complaint viewing for saved customers
   - Heart icon on clients page for customers who left negative ratings
   - Click to view rating, message and date of complaint

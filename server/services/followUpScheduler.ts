@@ -1,5 +1,6 @@
 import { getFirestore } from "../firebase";
-import { sendSMS } from "./smsService";
+import { sendSMS, sendMMS } from "./smsService";
+import { personalizeImageFromUrl, uploadToFirebaseStorage } from "./imageService";
 
 const PROCESS_INTERVAL_MS = 60 * 60 * 1000; // Check every hour
 
@@ -12,6 +13,7 @@ interface FollowUpMessage {
 interface FollowUpSettings {
   enabled: boolean;
   messages: FollowUpMessage[];
+  templateId?: string;
 }
 
 function generateTrackingSlug(): string {
@@ -40,6 +42,15 @@ async function processUserFollowUps(userId: string, userData: any, baseUrl: stri
 
   if (validMessages.length === 0) {
     return { sent: 0, failed: 0 };
+  }
+
+  // Fetch template if configured
+  let template: any = null;
+  if (settings.templateId) {
+    const templateDoc = await db.collection('templates').doc(settings.templateId).get();
+    if (templateDoc.exists) {
+      template = templateDoc.data();
+    }
   }
 
   const clientsSnapshot = await db.collection('clients')
@@ -84,7 +95,44 @@ async function processUserFollowUps(userId: string, userData: any, baseUrl: stri
 
         console.log(`[FollowUp] Sending follow-up #${i + 1} to ${client.name} (${client.phone})`);
 
-        const result = await sendSMS(client.phone, personalizedMessage);
+        let result;
+        
+        // Check if message contains {{image}} and we have a template
+        if (template && followUp.message.includes('{{image}}')) {
+          try {
+            // Generate personalized image
+            const imageBuffer = await personalizeImageFromUrl(
+              template.imageUrl,
+              client.name || 'Klient',
+              {
+                x: parseInt(template.textX) || 50,
+                y: parseInt(template.textY) || 100,
+                fontSize: parseInt(template.fontSize) || 48,
+                fontColor: template.fontColor || '#ffffff',
+              },
+              true // forMMS
+            );
+            
+            // Upload to Firebase Storage
+            const { url: imageUrl } = await uploadToFirebaseStorage(
+              imageBuffer,
+              userId,
+              `followup_${Date.now()}_${client.name?.replace(/\s+/g, '_') || 'client'}.jpg`
+            );
+
+            // Send MMS with image
+            const cleanMessage = personalizedMessage.replace(/\{\{image\}\}/g, '').trim();
+            result = await sendMMS(client.phone, cleanMessage, imageUrl);
+            console.log(`[FollowUp] Sent MMS with personalized image to ${client.name}`);
+          } catch (e: any) {
+            console.error(`[FollowUp] Failed to generate image for ${client.name}:`, e.message);
+            // Fallback to SMS without image
+            const cleanMessage = personalizedMessage.replace(/\{\{image\}\}/g, '').trim();
+            result = await sendSMS(client.phone, cleanMessage);
+          }
+        } else {
+          result = await sendSMS(client.phone, personalizedMessage);
+        }
 
         if (result.success) {
           await clientDoc.ref.update({

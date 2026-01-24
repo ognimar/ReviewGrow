@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2, Link2, Unlink, MapPin, Star, ExternalLink, Building2, Bot, Sparkles, Play, MessageSquare, Clock, Send, Copy } from "lucide-react";
+import { Loader2, Link2, Unlink, MapPin, Star, ExternalLink, Building2, Bot, Sparkles, Play, MessageSquare, Clock, Send } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
@@ -30,6 +30,7 @@ interface FollowUpMessage {
 interface FollowUpSettings {
   enabled: boolean;
   messages: FollowUpMessage[];
+  templateId?: string | null;
 }
 
 interface GoogleStatus {
@@ -67,6 +68,7 @@ interface Campaign {
   name: string;
   message?: string;
   status: string;
+  templateId?: string;
 }
 
 export default function Settings() {
@@ -88,6 +90,7 @@ export default function Settings() {
       message: '',
     }))
   );
+  const [followUpTemplateId, setFollowUpTemplateId] = useState<string | null>(null);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>("");
 
   const { data: campaigns } = useQuery<Campaign[]>({
@@ -103,14 +106,16 @@ export default function Settings() {
 
   const sentCampaigns = campaigns?.filter(c => c.status === 'SENT' && c.message) || [];
 
-  const copyFromCampaign = () => {
-    const campaign = sentCampaigns.find(c => c.id === selectedCampaignId);
+  const handleCampaignSelect = (campaignId: string) => {
+    setSelectedCampaignId(campaignId);
+    const campaign = sentCampaigns.find(c => c.id === campaignId);
     if (campaign?.message) {
       setFollowUpMessages(prev => prev.map(msg => ({
         ...msg,
         message: campaign.message || '',
       })));
-      toast({ title: 'Skopiowano treść z kampanii', description: `Treść z "${campaign.name}" została skopiowana do wszystkich follow-upów.` });
+      setFollowUpTemplateId(campaign.templateId || null);
+      toast({ title: 'Skopiowano z kampanii', description: `Treść i szablon z "${campaign.name}" zostały załadowane.` });
     }
   };
 
@@ -266,6 +271,7 @@ export default function Settings() {
       if (followUpSettings.messages?.length) {
         setFollowUpMessages(followUpSettings.messages);
       }
+      setFollowUpTemplateId(followUpSettings.templateId || null);
     }
   }, [followUpSettings]);
 
@@ -773,30 +779,18 @@ export default function Settings() {
                   <div className="flex items-center justify-between">
                     <Label>Konfiguracja wiadomości follow-up (do 5)</Label>
                     {sentCampaigns.length > 0 && (
-                      <div className="flex items-center gap-2">
-                        <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
-                          <SelectTrigger className="w-48 h-8 text-sm" data-testid="select-campaign">
-                            <SelectValue placeholder="Wybierz kampanię..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {sentCampaigns.map((campaign) => (
-                              <SelectItem key={campaign.id} value={campaign.id}>
-                                {campaign.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={copyFromCampaign}
-                          disabled={!selectedCampaignId}
-                          data-testid="button-copy-from-campaign"
-                        >
-                          <Copy className="h-4 w-4 mr-1" />
-                          Kopiuj
-                        </Button>
-                      </div>
+                      <Select value={selectedCampaignId} onValueChange={handleCampaignSelect}>
+                        <SelectTrigger className="w-56 h-8 text-sm" data-testid="select-campaign">
+                          <SelectValue placeholder="Kopiuj z kampanii..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {sentCampaigns.map((campaign) => (
+                            <SelectItem key={campaign.id} value={campaign.id}>
+                              {campaign.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     )}
                   </div>
                   
@@ -847,6 +841,7 @@ export default function Settings() {
                     onClick={() => saveFollowUpMutation.mutate({
                       enabled: followUpEnabled,
                       messages: followUpMessages,
+                      templateId: followUpTemplateId,
                     })}
                     disabled={saveFollowUpMutation.isPending}
                     data-testid="button-save-follow-up"
