@@ -104,7 +104,7 @@ export default function Settings() {
     },
   });
 
-  const sentCampaigns = campaigns?.filter(c => c.status === 'SENT' && c.message) || [];
+  const sentCampaigns = campaigns?.filter(c => c.status?.toUpperCase() === 'SENT' && c.message) || [];
 
   const handleCampaignSelect = (campaignId: string) => {
     setSelectedCampaignId(campaignId);
