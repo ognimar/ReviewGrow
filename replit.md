@@ -85,15 +85,27 @@ SENDGRID_API_KEY=your-sendgrid-key
 subscription: {
   planId: string;           // 'starter' | 'growth' | 'pro'
   billingCycle: string;     // 'monthly' | 'yearly'
-  status: string;           // 'active' | 'expired' | 'canceled'
+  status: string;           // 'active' | 'canceling' | 'past_due' | 'unpaid' | 'canceled' | 'expired'
   requestLimit: number;     // Max requests per period
   requestsUsed: number;     // Current usage (atomic increment)
   startedAt: string;        // ISO date
   expiresAt: string;        // ISO date
+  cancelAt?: string;        // Date when subscription will be canceled (cancel_at_period_end)
+  canceledAt?: string;      // Date when subscription was canceled
+  lastPaymentFailedAt?: string; // Date of last payment failure
   stripeSessionId: string;
   stripeSubscriptionId?: string;
+  stripeCustomerId?: string; // Stripe customer ID for portal access
 }
 ```
+
+### Subscription Status Lifecycle
+- **active**: Subscription is active and paid
+- **canceling**: User requested cancellation, but still has access until period end
+- **past_due**: Payment failed, grace period - user can still log in but should update payment
+- **unpaid**: Multiple payment failures - campaign sending is blocked
+- **canceled**: Subscription fully canceled (after period end)
+- **expired**: Subscription period ended without renewal
 
 ## Security
 - Firebase Authentication with JWT verification
@@ -108,6 +120,18 @@ Run `npm run dev` to start the development server on port 5000.
 - **Contact Review Grow** = Official business name (Bartosz Straszewski, NIP: 6472614652) used everywhere in the platform
 
 ## Recent Changes
+- 2026-01-27: Full Stripe subscription lifecycle implementation
+  - Customer Billing Portal integration for self-service management
+  - Cancel at period end support (subscription.status = 'canceling')
+  - Failed payment handling (past_due/unpaid statuses)
+  - Campaign sending blocked for problematic subscription statuses
+  - UI alerts for past_due, unpaid, and canceling statuses
+  - "Zarządzaj subskrypcją" button to open Stripe portal
+  - Automatic request limit reset on successful recurring payment
+  - Follow-up scheduler respects subscription status and limits
+- 2026-01-27: Follow-up credit tracking fix
+  - Each follow-up now deducts 1 credit from subscription.requestsUsed
+  - Also increments smsUsed counter
 - 2026-01-24: Added Automatic Follow-up SMS feature
   - Up to 5 configurable follow-up messages per user
   - Each message has: enabled toggle, days after (1-30), message content

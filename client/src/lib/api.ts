@@ -135,6 +135,19 @@ export async function verifyCheckoutSession(sessionId: string) {
   return response.json();
 }
 
+export async function createPortalSession() {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/billing/portal`, {
+    method: 'POST',
+    headers,
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || 'Failed to create portal session');
+  }
+  return response.json();
+}
+
 export async function updateSubscriptionPlan(planId: string, data: any) {
   const headers = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/admin/subscription-plans/${planId}`, {

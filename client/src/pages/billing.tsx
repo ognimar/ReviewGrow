@@ -1,14 +1,15 @@
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Check, Loader2, Crown, AlertCircle } from "lucide-react";
+import { Check, Loader2, Crown, AlertCircle, CreditCard, XCircle, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createCheckoutSession, fetchSubscriptionPlans, fetchBillingStatus, verifyCheckoutSession } from "@/lib/api";
+import { createCheckoutSession, fetchSubscriptionPlans, fetchBillingStatus, verifyCheckoutSession, createPortalSession } from "@/lib/api";
 import { useLocation } from "wouter";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface SubscriptionPlan {
   id: string;
@@ -28,6 +29,8 @@ interface Subscription {
   requestsUsed: number;
   startedAt: string;
   expiresAt: string;
+  cancelAt?: string;
+  canceledAt?: string;
 }
 
 export default function Billing() {
@@ -105,6 +108,22 @@ export default function Billing() {
     },
   });
 
+  const portalMutation = useMutation({
+    mutationFn: createPortalSession,
+    onSuccess: (data) => {
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Błąd',
+        description: error.message || 'Nie udało się otworzyć panelu zarządzania',
+        variant: 'destructive',
+      });
+    },
+  });
+
   const handleCheckout = (planId: string) => {
     setLoadingPlan(planId);
     checkoutMutation.mutate({ planId, billingCycle });
@@ -144,19 +163,70 @@ export default function Billing() {
           <p className="text-muted-foreground">Zarządzaj swoją subskrypcją</p>
         </div>
 
-        {subscription && subscription.status === 'active' && (
-          <Card className="border-primary bg-primary/5" data-testid="card-current-subscription">
+        {subscription && subscription.status === 'past_due' && (
+          <Alert variant="destructive" data-testid="alert-past-due">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Problem z płatnością</AlertTitle>
+            <AlertDescription className="flex items-center justify-between">
+              <span>Nie mogliśmy pobrać płatności. Zaktualizuj metodę płatności, aby uniknąć przerwy w działaniu kampanii.</span>
+              <Button 
+                variant="destructive" 
+                size="sm" 
+                onClick={() => portalMutation.mutate()}
+                disabled={portalMutation.isPending}
+                data-testid="button-update-payment"
+              >
+                {portalMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CreditCard className="mr-2 h-4 w-4" />}
+                Zaktualizuj kartę
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {subscription && subscription.status === 'unpaid' && (
+          <Alert variant="destructive" data-testid="alert-unpaid">
+            <XCircle className="h-4 w-4" />
+            <AlertTitle>Wysyłka zablokowana</AlertTitle>
+            <AlertDescription className="flex items-center justify-between">
+              <span>Twoja płatność nie powiodła się. Wysyłka kampanii i follow-upów została zablokowana. Zaktualizuj metodę płatności, aby odblokować.</span>
+              <Button 
+                variant="destructive" 
+                size="sm" 
+                onClick={() => portalMutation.mutate()}
+                disabled={portalMutation.isPending}
+                data-testid="button-fix-payment"
+              >
+                {portalMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CreditCard className="mr-2 h-4 w-4" />}
+                Napraw płatność
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {subscription && subscription.status === 'canceling' && (
+          <Alert data-testid="alert-canceling" className="border-orange-300 bg-orange-50">
+            <Clock className="h-4 w-4 text-orange-600" />
+            <AlertTitle className="text-orange-800">Subskrypcja zostanie anulowana</AlertTitle>
+            <AlertDescription className="text-orange-700">
+              Twoja subskrypcja wygaśnie {subscription.cancelAt ? new Date(subscription.cancelAt).toLocaleDateString('pl-PL') : new Date(subscription.expiresAt).toLocaleDateString('pl-PL')}. 
+              Twoje dane zostaną zachowane, ale wysyłka kampanii zostanie zablokowana po tej dacie.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {subscription && (subscription.status === 'active' || subscription.status === 'canceling') && (
+          <Card className={`border-primary bg-primary/5 ${subscription.status === 'canceling' ? 'opacity-80' : ''}`} data-testid="card-current-subscription">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Crown className="h-5 w-5 text-primary" />
-                Aktywna subskrypcja: {plans.find(p => p.id === subscription.planId)?.name || subscription.planId}
+                {subscription.status === 'canceling' ? 'Subskrypcja (wygasa)' : 'Aktywna subskrypcja'}: {plans.find(p => p.id === subscription.planId)?.name || subscription.planId}
               </CardTitle>
               <CardDescription>
                 {subscription.billingCycle === 'yearly' ? 'Rozliczenie roczne' : 'Rozliczenie miesięczne'} 
-                {' '}• Wygasa: {new Date(subscription.expiresAt).toLocaleDateString('pl-PL')}
+                {' '}• {subscription.status === 'canceling' ? 'Wygasa' : 'Odnawia się'}: {new Date(subscription.expiresAt).toLocaleDateString('pl-PL')}
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span>Wykorzystane requesty</span>
@@ -168,17 +238,32 @@ export default function Billing() {
                   data-testid="progress-requests"
                 />
               </div>
+              <Button 
+                variant="outline" 
+                onClick={() => portalMutation.mutate()}
+                disabled={portalMutation.isPending}
+                data-testid="button-manage-subscription"
+              >
+                {portalMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CreditCard className="mr-2 h-4 w-4" />}
+                Zarządzaj subskrypcją
+              </Button>
             </CardContent>
           </Card>
         )}
 
-        {(!subscription || subscription.status !== 'active') && (
+        {(!subscription || (subscription.status !== 'active' && subscription.status !== 'canceling' && subscription.status !== 'past_due' && subscription.status !== 'unpaid')) && (
           <Card className="border-destructive bg-destructive/5" data-testid="card-no-subscription">
             <CardContent className="flex items-center gap-4 py-4">
               <AlertCircle className="h-6 w-6 text-destructive" />
               <div>
-                <p className="font-medium">Brak aktywnej subskrypcji</p>
-                <p className="text-sm text-muted-foreground">Wybierz plan, aby odblokować wszystkie funkcje</p>
+                <p className="font-medium">
+                  {subscription?.status === 'canceled' ? 'Subskrypcja anulowana' : 'Brak aktywnej subskrypcji'}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {subscription?.status === 'canceled' 
+                    ? 'Twoje dane zostały zachowane. Wybierz plan, aby reaktywować konto.'
+                    : 'Wybierz plan, aby odblokować wszystkie funkcje'}
+                </p>
               </div>
             </CardContent>
           </Card>

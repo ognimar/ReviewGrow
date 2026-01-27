@@ -30,6 +30,29 @@ async function processUserFollowUps(userId: string, userData: any, baseUrl: stri
   const db = getFirestore();
   if (!db) return { sent: 0, failed: 0 };
 
+  // Check subscription status - only allow active or canceling (paid until period end)
+  const subscription = userData?.subscription;
+  const allowedStatuses = ['active', 'canceling'];
+  if (!subscription || !allowedStatuses.includes(subscription.status)) {
+    console.log(`[FollowUp] Skipping user ${userId} - subscription status: ${subscription?.status || 'none'}`);
+    return { sent: 0, failed: 0 };
+  }
+  
+  // Check if subscription is expired
+  const expiresAt = subscription.expiresAt ? new Date(subscription.expiresAt) : null;
+  if (expiresAt && expiresAt < new Date()) {
+    console.log(`[FollowUp] Skipping user ${userId} - subscription expired at ${expiresAt.toISOString()}`);
+    return { sent: 0, failed: 0 };
+  }
+  
+  // Check request limit
+  const requestsUsed = subscription.requestsUsed || 0;
+  const requestLimit = subscription.requestLimit || 0;
+  if (requestsUsed >= requestLimit) {
+    console.log(`[FollowUp] Skipping user ${userId} - request limit reached (${requestsUsed}/${requestLimit})`);
+    return { sent: 0, failed: 0 };
+  }
+
   const settings: FollowUpSettings = userData.followUpSettings;
   if (!settings?.enabled || !settings.messages?.length) {
     return { sent: 0, failed: 0 };

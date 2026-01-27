@@ -355,7 +355,16 @@ export async function registerRoutes(
             userData = userDoc.data();
             const subscription = userData?.subscription;
             
-            if (!subscription || subscription.status !== 'active') {
+            // Allow 'active' and 'canceling' (paid until period end), block others
+            const allowedStatuses = ['active', 'canceling'];
+            if (!subscription || !allowedStatuses.includes(subscription.status)) {
+              if (subscription?.status === 'past_due') {
+                throw new Error('PAYMENT_PAST_DUE');
+              } else if (subscription?.status === 'unpaid') {
+                throw new Error('PAYMENT_UNPAID');
+              } else if (subscription?.status === 'canceled') {
+                throw new Error('SUBSCRIPTION_CANCELED');
+              }
               throw new Error('SUBSCRIPTION_REQUIRED');
             }
 
@@ -385,6 +394,12 @@ export async function registerRoutes(
             return res.status(403).json({ error: 'Aktywna subskrypcja jest wymagana. Przejdź do strony Płatności, aby wybrać plan.' });
           } else if (txError.message === 'SUBSCRIPTION_EXPIRED') {
             return res.status(403).json({ error: 'Twoja subskrypcja wygasła. Odnów subskrypcję, aby kontynuować.' });
+          } else if (txError.message === 'PAYMENT_PAST_DUE') {
+            return res.status(403).json({ error: 'Występuje problem z płatnością. Zaktualizuj metodę płatności w panelu Stripe, aby kontynuować wysyłkę kampanii.' });
+          } else if (txError.message === 'PAYMENT_UNPAID') {
+            return res.status(403).json({ error: 'Twoja płatność nie powiodła się. Wysyłka kampanii została zablokowana. Zaktualizuj metodę płatności, aby odblokować.' });
+          } else if (txError.message === 'SUBSCRIPTION_CANCELED') {
+            return res.status(403).json({ error: 'Twoja subskrypcja została anulowana. Wykup nowy plan, aby kontynuować.' });
           } else if (txError.message.startsWith('LIMIT_EXCEEDED:')) {
             const parts = txError.message.split(':');
             return res.status(403).json({ 
@@ -981,8 +996,8 @@ export async function registerRoutes(
       const isYearly = billingCycle === 'yearly';
       const amount = isYearly ? plan.yearlyPrice : plan.monthlyPrice;
 
-      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
+      const baseUrl = process.env.REPLIT_DOMAINS?.split(',')[0] 
+        ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
         : 'http://localhost:5000';
 
       const session = await stripe.checkout.sessions.create({
@@ -1017,6 +1032,64 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Stripe checkout error:', error);
       res.status(500).json({ error: 'Failed to create checkout session' });
+    }
+  });
+
+  // Stripe Customer Portal - for managing subscription, payment methods, invoices
+  app.post("/api/billing/portal", authenticate, async (req: AuthRequest, res) => {
+    try {
+      if (!stripe) {
+        return res.status(503).json({ error: 'Stripe not configured' });
+      }
+
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      // Get user's Stripe customer ID
+      const userDoc = await db.collection('users').doc(req.user!.uid).get();
+      const userData = userDoc.data();
+      
+      let customerId = userData?.stripeCustomerId;
+      
+      // If no customer ID stored, try to find by email or create new
+      if (!customerId) {
+        const customers = await stripe.customers.list({
+          email: req.user!.email || undefined,
+          limit: 1,
+        });
+        
+        if (customers.data.length > 0) {
+          customerId = customers.data[0].id;
+        } else {
+          // Create new customer
+          const customer = await stripe.customers.create({
+            email: req.user!.email || undefined,
+            metadata: { userId: req.user!.uid },
+          });
+          customerId = customer.id;
+        }
+        
+        // Save customer ID for future use
+        await db.collection('users').doc(req.user!.uid).update({
+          stripeCustomerId: customerId,
+        });
+      }
+
+      const baseUrl = process.env.REPLIT_DOMAINS?.split(',')[0] 
+        ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
+        : 'http://localhost:5000';
+
+      const portalSession = await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: `${baseUrl}/billing`,
+      });
+
+      res.json({ url: portalSession.url });
+    } catch (error) {
+      console.error('Stripe portal error:', error);
+      res.status(500).json({ error: 'Failed to create portal session' });
     }
   });
 
@@ -1073,7 +1146,9 @@ export async function registerRoutes(
                 expiresAt: expiresAt.toISOString(),
                 stripeSessionId: session.id,
                 stripeSubscriptionId: session.subscription || null,
+                stripeCustomerId: session.customer || null,
               },
+              stripeCustomerId: session.customer || null,
             });
             console.log(`Subscription activated for user ${userId}: ${planId} (${billingCycle})`);
           }
@@ -1081,23 +1156,108 @@ export async function registerRoutes(
         }
 
         case 'customer.subscription.updated': {
-          const subscription = event.data.object;
-          // Handle subscription updates if needed
+          const subscription = event.data.object as any;
+          // Find user by subscription ID
+          const usersUpdatedSnapshot = await db.collection('users')
+            .where('subscription.stripeSubscriptionId', '==', subscription.id)
+            .get();
+
+          for (const doc of usersUpdatedSnapshot.docs) {
+            const updates: any = {};
+            
+            // Priority: past_due/unpaid takes precedence over canceling
+            // Handle status changes from Stripe (payment issues take priority)
+            if (subscription.status === 'past_due') {
+              updates['subscription.status'] = 'past_due';
+              console.log(`Subscription past_due for user ${doc.id}`);
+            } else if (subscription.status === 'unpaid') {
+              updates['subscription.status'] = 'unpaid';
+              console.log(`Subscription unpaid for user ${doc.id}`);
+            } else if (subscription.cancel_at_period_end) {
+              // Handle cancel_at_period_end - user requested cancellation
+              updates['subscription.status'] = 'canceling';
+              updates['subscription.cancelAt'] = new Date(subscription.cancel_at * 1000).toISOString();
+              console.log(`Subscription marked as canceling for user ${doc.id}, will expire at ${updates['subscription.cancelAt']}`);
+            } else if (subscription.status === 'active') {
+              // Reactivated or still active (no cancel pending)
+              updates['subscription.status'] = 'active';
+              updates['subscription.cancelAt'] = null;
+              console.log(`Subscription active for user ${doc.id}`);
+            }
+            
+            // Update plan limits if changed (upgrade/downgrade)
+            if (subscription.items?.data?.[0]?.price?.metadata?.requestLimit) {
+              updates['subscription.requestLimit'] = parseInt(subscription.items.data[0].price.metadata.requestLimit);
+              console.log(`Updated request limit to ${updates['subscription.requestLimit']} for user ${doc.id}`);
+            }
+            
+            if (Object.keys(updates).length > 0) {
+              await doc.ref.update(updates);
+            }
+          }
           break;
         }
 
         case 'customer.subscription.deleted': {
-          const subscription = event.data.object;
-          // Handle subscription cancellation
-          // Find user by subscription ID and deactivate
-          const usersSnapshot = await db.collection('users')
+          const subscription = event.data.object as any;
+          // Handle subscription cancellation (final)
+          const usersDeletedSnapshot = await db.collection('users')
             .where('subscription.stripeSubscriptionId', '==', subscription.id)
             .get();
 
-          for (const doc of usersSnapshot.docs) {
+          for (const doc of usersDeletedSnapshot.docs) {
             await doc.ref.update({
               'subscription.status': 'canceled',
+              'subscription.canceledAt': new Date().toISOString(),
             });
+            console.log(`Subscription canceled for user ${doc.id}`);
+          }
+          break;
+        }
+
+        case 'invoice.payment_failed': {
+          const invoice = event.data.object as any;
+          // Find user by customer ID or subscription ID
+          const subscriptionId = invoice.subscription;
+          if (subscriptionId) {
+            const usersFailedSnapshot = await db.collection('users')
+              .where('subscription.stripeSubscriptionId', '==', subscriptionId)
+              .get();
+
+            for (const doc of usersFailedSnapshot.docs) {
+              await doc.ref.update({
+                'subscription.status': 'past_due',
+                'subscription.lastPaymentFailedAt': new Date().toISOString(),
+              });
+              console.log(`Payment failed for user ${doc.id}, status set to past_due`);
+            }
+          }
+          break;
+        }
+
+        case 'invoice.payment_succeeded': {
+          const invoice = event.data.object as any;
+          const subscriptionId = invoice.subscription;
+          if (subscriptionId && invoice.billing_reason === 'subscription_cycle') {
+            // Recurring payment succeeded - extend subscription
+            const usersSuccessSnapshot = await db.collection('users')
+              .where('subscription.stripeSubscriptionId', '==', subscriptionId)
+              .get();
+
+            for (const doc of usersSuccessSnapshot.docs) {
+              const userData = doc.data();
+              const currentExpiry = new Date(userData.subscription?.expiresAt || new Date());
+              const newExpiry = new Date(currentExpiry);
+              newExpiry.setMonth(newExpiry.getMonth() + 1);
+              
+              await doc.ref.update({
+                'subscription.status': 'active',
+                'subscription.expiresAt': newExpiry.toISOString(),
+                'subscription.requestsUsed': 0, // Reset usage for new billing cycle
+                'subscription.lastPaymentFailedAt': null,
+              });
+              console.log(`Recurring payment succeeded for user ${doc.id}, subscription extended to ${newExpiry.toISOString()}`);
+            }
           }
           break;
         }

@@ -1,0 +1,59 @@
+Cel: Zaimplementuj pełny cykl życia subskrypcji Stripe, w tym anulowanie, okresy karencji oraz obsługę nieudanych płatności.
+
+1. Customer Billing Portal (Rekomendowane):
+
+    Zamiast budować własny edytor kart, zintegruj Stripe Billing Portal. Stwórz endpoint /api/create-portal-session, który przekieruje użytkownika do bezpiecznego panelu Stripe, gdzie może on:
+
+        Anulować subskrypcję.
+
+        Zmienić metodę płatności (nowa karta).
+
+        Pobrać faktury VAT.
+
+        Zmienić plan (Upgrade/Downgrade).
+
+2. Logika Anulowania (Edge Cases):
+
+    Cancel at period end: Po kliknięciu "Anuluj", subskrypcja w Stripe powinna otrzymać status cancel_at_period_end = true.
+
+    Dostęp do końca okresu: Użytkownik musi zachować dostęp do Dashboardu i swoich limitów requestów do końca opłaconego okresu (np. jeśli opłacił do 20-go, a anulował 5-go, system ma działać jeszcze przez 15 dni).
+
+    Status "Canceling": W UI Dashboardu wyświetl informację: "Twoja subskrypcja wygaśnie [DATA]. Twoje dane zostaną zachowane, ale wysyłka kampanii zostanie zablokowana".
+
+3. Obsługa Nieudanych Płatności (Dunning Process):
+
+    Webhook invoice.payment_failed: Jeśli Stripe nie może pobrać środków, zmień status organizacji na past_due.
+
+    Grace Period (Okres karencji): Pozwól użytkownikowi na logowanie, ale wyświetl duży czerwony baner: "Problem z płatnością. Zaktualizuj kartę, aby uniknąć przerwania kampanii".
+
+    Blokada Wysyłki: Jeśli status zmieni się na unpaid, natychmiast zablokuj działanie linków feedback.reviewharvest.pl/u/{{token}} i wysyłkę nowych kampanii.
+
+4. Downgrade/Upgrade (Zmiana Planu):
+
+    Proration: Przy zmianie planu w trakcie miesiąca (np. ze Starter na Pro), użyj mechanizmu proration w Stripe, aby doliczyć tylko różnicę w cenie.
+
+    Aktualizacja Limitów: Po zmianie planu, system musi natychmiast zaktualizować pole monthly_limit w dokumencie organizacji w Firestore.
+
+5. Bezpieczeństwo Danych po Wygaśnięciu:
+
+    Jeśli subskrypcja wygaśnie całkowicie (status: canceled):
+
+        Nie usuwaj kontaktów ani kampanii klienta przez 30 dni (na wypadek, gdyby chciał wrócić).
+
+        Wyłącz automatyczne odpowiedzi AI (Smart Replies).
+
+        Wyświetl stronę "Reactivate", jeśli spróbuje wejść w ustawienia kampanii.
+
+Jak to połączyć z Twoimi statusami (RESPONDED)?
+
+Musisz dopilnować, aby Replit dodał jeden warunek w kodzie wysyłki:
+
+    "Przed wysłaniem każdego SMS-a sprawdź, czy organization.subscriptionStatus === 'active' LUB 'canceling'. Jeśli status to 'unpaid' lub 'past_due', przerwij wysyłkę i wyślij powiadomienie do właściciela".
+
+Co musisz zrobić w panelu Stripe:
+
+    Włącz Customer Portal w ustawieniach Stripe Dashboard.
+
+    Skonfiguruj Branding (Twoje logo i kolory), aby klient czuł, że wciąż jest w Twojej aplikacji.
+
+    Upewnij się, że Replit poprawnie skonfigurował Webhooki (szczególnie customer.subscription.updated oraz customer.subscription.deleted).
