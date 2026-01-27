@@ -113,16 +113,23 @@ async function processUserFollowUps(userId: string, userData: any, baseUrl: stri
               true // forMMS
             );
             
-            // Upload to Firebase Storage
+            // Upload image to Firebase Storage
             const { url: imageUrl } = await uploadToFirebaseStorage(
               imageBuffer,
               userId,
               `followup_${Date.now()}_${client.name?.replace(/\s+/g, '_') || 'client'}.jpg`
             );
 
-            // Send MMS with image
+            // Send MMS with image - upload text as file for SMIL
             const cleanMessage = personalizedMessage.replace(/\{\{image\}\}/g, '').trim();
-            result = await sendMMS(client.phone, cleanMessage, imageUrl);
+            const textBuffer = Buffer.from(cleanMessage, 'utf-8');
+            const { url: textUrl } = await uploadToFirebaseStorage(
+              textBuffer,
+              userId,
+              `followup_${Date.now()}_${client.name?.replace(/\s+/g, '_') || 'client'}.txt`
+            );
+            
+            result = await sendMMS(client.phone, cleanMessage, imageUrl, textUrl);
             console.log(`[FollowUp] Sent MMS with personalized image to ${client.name}`);
           } catch (e: any) {
             console.error(`[FollowUp] Failed to generate image for ${client.name}:`, e.message);
