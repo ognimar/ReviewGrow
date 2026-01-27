@@ -74,6 +74,14 @@ async function processUserFollowUps(userId: string, userData: any, baseUrl: stri
 
     const lastSentDate = new Date(client.lastSentAt).getTime();
     const followUpsSent = client.followUpsSent || 0;
+    
+    // Safety check: minimum 1 day between any follow-up messages
+    const lastFollowUpDate = client.lastFollowUpAt ? new Date(client.lastFollowUpAt).getTime() : 0;
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    if (lastFollowUpDate > 0 && (now - lastFollowUpDate) < oneDayMs) {
+      console.log(`[FollowUp] Skipping ${client.name} - last follow-up was less than 24h ago`);
+      continue;
+    }
 
     for (let i = followUpsSent; i < settings.messages.length; i++) {
       const followUp = settings.messages[i];
