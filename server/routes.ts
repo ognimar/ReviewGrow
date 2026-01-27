@@ -1370,14 +1370,17 @@ export async function registerRoutes(
           const updates: any = {};
           let needsUpdate = false;
           
-          // Sync cancel_at_period_end status
-          if (stripeSubscription.cancel_at_period_end && subscription.status !== 'canceling') {
+          // Sync cancel_at_period_end OR cancel_at status
+          // Stripe can have cancel_at set even if cancel_at_period_end is false (scheduled cancellation)
+          const isCanceling = stripeSubscription.cancel_at_period_end || (stripeSubscription.cancel_at && stripeSubscription.cancel_at > Date.now() / 1000);
+          
+          if (isCanceling && subscription.status !== 'canceling') {
             updates['subscription.status'] = 'canceling';
             updates['subscription.cancelAt'] = stripeSubscription.cancel_at 
               ? new Date(stripeSubscription.cancel_at * 1000).toISOString() 
               : null;
             needsUpdate = true;
-          } else if (!stripeSubscription.cancel_at_period_end && subscription.status === 'canceling') {
+          } else if (!isCanceling && subscription.status === 'canceling') {
             // User reactivated subscription
             updates['subscription.status'] = 'active';
             updates['subscription.cancelAt'] = null;
