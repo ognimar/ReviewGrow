@@ -1,6 +1,7 @@
 import { getFirestore } from "../firebase";
 import { sendSMS, sendMMS } from "./smsService";
 import { personalizeImageFromUrl, uploadToFirebaseStorage } from "./imageService";
+import { FieldValue } from "firebase-admin/firestore";
 
 const PROCESS_INTERVAL_MS = 60 * 60 * 1000; // Check every hour
 
@@ -150,12 +151,20 @@ async function processUserFollowUps(userId: string, userData: any, baseUrl: stri
         }
 
         if (result.success) {
+          // Update client record
           await clientDoc.ref.update({
             followUpsSent: i + 1,
             lastFollowUpAt: new Date().toISOString(),
           });
+          
+          // Deduct credits from user's subscription
+          await db.collection('users').doc(userId).update({
+            'subscription.requestsUsed': FieldValue.increment(1),
+            smsUsed: FieldValue.increment(1),
+          });
+          
           sent++;
-          console.log(`[FollowUp] Successfully sent follow-up #${i + 1} to ${client.name}`);
+          console.log(`[FollowUp] Successfully sent follow-up #${i + 1} to ${client.name} (1 credit used)`);
         } else {
           failed++;
           console.error(`[FollowUp] Failed to send follow-up to ${client.name}: ${result.error}`);
