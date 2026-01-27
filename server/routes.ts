@@ -1351,7 +1351,64 @@ export async function registerRoutes(
       const userDoc = await db.collection('users').doc(req.user!.uid).get();
       const userData = userDoc.data();
 
-      const subscription = userData?.subscription || null;
+      let subscription = userData?.subscription || null;
+
+      // Sync subscription status from Stripe if we have a subscriptionId
+      if (stripe && subscription?.stripeSubscriptionId) {
+        try {
+          const stripeSubscription = await stripe.subscriptions.retrieve(subscription.stripeSubscriptionId);
+          const updates: any = {};
+          let needsUpdate = false;
+          
+          // Sync cancel_at_period_end status
+          if (stripeSubscription.cancel_at_period_end && subscription.status !== 'canceling') {
+            updates['subscription.status'] = 'canceling';
+            updates['subscription.cancelAt'] = stripeSubscription.cancel_at 
+              ? new Date(stripeSubscription.cancel_at * 1000).toISOString() 
+              : null;
+            needsUpdate = true;
+          } else if (!stripeSubscription.cancel_at_period_end && subscription.status === 'canceling') {
+            // User reactivated subscription
+            updates['subscription.status'] = 'active';
+            updates['subscription.cancelAt'] = null;
+            needsUpdate = true;
+          }
+          
+          // Sync Stripe status changes (past_due, unpaid, canceled)
+          if (stripeSubscription.status === 'past_due' && subscription.status !== 'past_due') {
+            updates['subscription.status'] = 'past_due';
+            needsUpdate = true;
+          } else if (stripeSubscription.status === 'unpaid' && subscription.status !== 'unpaid') {
+            updates['subscription.status'] = 'unpaid';
+            needsUpdate = true;
+          } else if (stripeSubscription.status === 'canceled' && subscription.status !== 'canceled') {
+            updates['subscription.status'] = 'canceled';
+            updates['subscription.canceledAt'] = new Date().toISOString();
+            needsUpdate = true;
+          }
+          
+          if (needsUpdate) {
+            await db.collection('users').doc(req.user!.uid).update(updates);
+            // Apply updates to subscription object for response
+            if (updates['subscription.status']) subscription.status = updates['subscription.status'];
+            if (updates['subscription.cancelAt']) subscription.cancelAt = updates['subscription.cancelAt'];
+            if (updates['subscription.canceledAt']) subscription.canceledAt = updates['subscription.canceledAt'];
+            console.log(`Synced subscription status from Stripe for user ${req.user!.uid}: ${JSON.stringify(updates)}`);
+          }
+        } catch (stripeError: any) {
+          // Subscription might have been deleted in Stripe
+          if (stripeError.code === 'resource_missing') {
+            await db.collection('users').doc(req.user!.uid).update({
+              'subscription.status': 'canceled',
+              'subscription.canceledAt': new Date().toISOString(),
+            });
+            subscription.status = 'canceled';
+            console.log(`Subscription not found in Stripe, marked as canceled for user ${req.user!.uid}`);
+          } else {
+            console.error('Stripe sync error:', stripeError.message);
+          }
+        }
+      }
 
       // Check if subscription is expired
       if (subscription && subscription.expiresAt) {
