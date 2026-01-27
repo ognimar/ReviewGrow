@@ -170,9 +170,9 @@ async function processAllUsers(): Promise<void> {
     return;
   }
 
-  const baseUrl = process.env.REPL_SLUG 
-    ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER?.toLowerCase()}.repl.co`
-    : process.env.BASE_URL || 'http://localhost:5000';
+  const baseUrl = process.env.REPLIT_DOMAINS?.split(',')[0] 
+    ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
+    : 'http://localhost:5000';
 
   try {
     const usersSnapshot = await db.collection('users')
