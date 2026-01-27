@@ -1354,9 +1354,19 @@ export async function registerRoutes(
       let subscription = userData?.subscription || null;
 
       // Sync subscription status from Stripe if we have a subscriptionId
+      console.log('[BillingStatus] Checking Stripe sync:', { 
+        hasStripe: !!stripe, 
+        subscriptionId: subscription?.stripeSubscriptionId 
+      });
       if (stripe && subscription?.stripeSubscriptionId) {
         try {
           const stripeSubscription = await stripe.subscriptions.retrieve(subscription.stripeSubscriptionId);
+          console.log('[BillingStatus] Stripe subscription:', {
+            status: stripeSubscription.status,
+            cancel_at_period_end: stripeSubscription.cancel_at_period_end,
+            cancel_at: stripeSubscription.cancel_at,
+            current_period_end: stripeSubscription.current_period_end
+          });
           const updates: any = {};
           let needsUpdate = false;
           
