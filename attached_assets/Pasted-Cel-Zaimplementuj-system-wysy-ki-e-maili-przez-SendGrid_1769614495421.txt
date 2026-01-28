@@ -1,0 +1,82 @@
+Cel: Zaimplementuj system wysyłki e-maili przez SendGrid API z obsługą sekwencji (Follow-up) i inteligentnym przerywaniem wysyłki po wystawieniu opinii.
+
+1. Konfiguracja SendGrid:
+
+    Skonfiguruj SENDGRID_API_KEY w Replit Secrets.
+
+    Stwórz serwis EmailService, który obsługuje wysyłkę e-maili przy użyciu unikalnych linków śledzących (feedback.reviewharvest.pl/u/{{token}}).
+
+2. Architektura Sekwencji (Follow-up Logic): Zaimplementuj system kolejkowania zadań (np. używając BullMQ lub prostego node-cron z bazą danych), który obsłuży następujący proces:
+
+    E-mail 1 (Zaproszenie): Wysyłany natychmiast po uruchomieniu kampanii. Ustaw status kontaktu na SENT.
+
+    E-mail 2 (Follow-up 1): Planowany automatycznie po 3 dniach.
+
+        WARUNEK PRZED WYSYŁKĄ: Sprawdź status kontaktu w Firestore. Jeśli status to RESPONDED (opinia wystawiona), anuluj wysyłkę.
+
+    E-mail 3 (Follow-up 2): Planowany po 7 dniach.
+
+        WARUNEK: Wyślij tylko, jeśli status nadal jest inny niż RESPONDED.
+
+3. Dynamiczne Szablony i Personalizacja:
+
+    Użyj SendGrid Dynamic Templates (template_id).
+
+    Przesyłaj do szablonu dane: {{first_name}}, {{company_name}} oraz najważniejsze: unikalny link {{review_link}}, który prowadzi do naszego Landing Page (Review Funnel).
+
+4. Tracking i Analityka:
+
+    Zintegruj SendGrid Webhooks (event_webhook), aby śledzić:
+
+        delivered: Potwierdzenie dostarczenia.
+
+        open: Otwarcie maila.
+
+        bounce: Błąd dostarczenia (zmień status kontaktu na BOUNCED).
+
+        unsubscribe: Jeśli klient się wypisze, oznacz go w bazie jako OPT_OUT, aby nigdy więcej nie dostał maila.
+
+5. UI dla Użytkownika (Campaign Builder):
+
+    W zakładce "Campaigns" dodaj sekcję "Email Sequence".
+
+    Pozwól użytkownikowi:
+
+        Edytować treść e-maili (lub wybrać template).
+
+        Ustawić odstęp czasu między e-mailami (np. 3 dni, 5 dni).
+
+        Włączyć/Wyłączyć automatyczne follow-upy.
+        1. System Kredytowy (Credit Guard):
+
+    Każda wiadomość (SMS, E-mail, Follow-up) kosztuje 1 kredyt.
+
+    Walidacja przed wysyłką: Zanim jakikolwiek proces (np. Cron Job dla follow-upów) wyśle wiadomość, musi sprawdzić: if (organization.credits > 0).
+
+    Atomowe odliczanie: Użyj firestore.FieldValue.increment(-1) przy każdej udanej wysyłce, aby uniknąć błędów przy dużej skali.
+
+2. Spójność Linków (Single Source of Truth):
+
+    Globalny Slug: Dla każdego kontaktu w kampanii wygeneruj tylko jeden unikalny slug (np. rh1.pl/u/abc123).
+
+    Zastosowanie: Ten sam link musi zostać użyty w:
+
+        Wiadomości SMS.
+
+        Pierwszym E-mailu.
+
+        Wszystkich kolejnych Follow-upach.
+
+    Dzięki temu, jeśli klient kliknie w link w SMS-ie, ale wystawi opinię po kliknięciu w e-maila, system poprawnie przypisze konwersję do tej samej osoby i zmieni status na RESPONDED.
+
+3. Logika Kolejkowania i Follow-upów (SendGrid): Zaimplementuj worker/proces w tle, który zarządza sekwencją:
+
+    Trigger Kampanii: Wysyła E-mail #1 -> Odejmuje 1 kredyt -> Status: SENT.
+
+    Oczekiwanie (np. 3 dni):
+
+        Sprawdź status kontaktu: jeśli RESPONDED, usuń zadanie z kolejki.
+
+        Sprawdź kredyty: jeśli 0, zatrzymaj sekwencję i wyślij powiadomienie do właściciela o braku środków.
+
+        Jeśli wszystko OK: Wyślij Follow-up #1 -> Odejmuje 1 kredyt.
