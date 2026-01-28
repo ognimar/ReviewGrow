@@ -1,0 +1,120 @@
+2026-01-28 22:24:48.56
+0a2c1d16
+User
+]
+2026-01-28 22:24:48.56
+0a2c1d16
+User
+help: null
+2026-01-28 22:24:48.56
+0a2c1d16
+User
+{
+2026-01-28 22:24:48.56
+0a2c1d16
+User
+errors: [
+2026-01-28 22:24:48.56
+0a2c1d16
+User
+field: 'from',
+2026-01-28 22:24:48.56
+0a2c1d16
+User
+message: 'The from address does not match a verified Sender Identity. Mail cannot be sent until this error is resolved. Visit https://sendgrid.com/docs/for-developers/sending-email/sender-identity/ to see the Sender Identity requirements',
+2026-01-28 22:24:48.56
+0a2c1d16
+User
+}
+2026-01-28 22:24:48.56
+0a2c1d16
+User
+[Email] Send error: {
+2026-01-28 22:24:48.56
+0a2c1d16
+User
+}
+2026-01-28 22:24:48.61
+0a2c1d16
+User
+}
+2026-01-28 22:24:48.61
+0a2c1d16
+User
+{
+2026-01-28 22:24:48.61
+0a2c1d16
+User
+help: null
+2026-01-28 22:24:48.61
+0a2c1d16
+User
+}
+2026-01-28 22:24:48.61
+0a2c1d16
+User
+field: 'from',
+2026-01-28 22:24:48.61
+0a2c1d16
+User
+errors: [
+2026-01-28 22:24:48.61
+0a2c1d16
+User
+[Email] Send error: {
+2026-01-28 22:24:48.61
+0a2c1d16
+User
+message: 'The from address does not match a verified Sender Identity. Mail cannot be sent until this error is resolved. Visit https://sendgrid.com/docs/for-developers/sending-email/sender-identity/ to see the Sender Identity requirements',
+2026-01-28 22:24:48.61
+0a2c1d16
+User
+]
+2026-01-28 22:24:48.69
+0a2c1d16
+User
+[Email] Send error: {
+2026-01-28 22:24:48.69
+0a2c1d16
+User
+field: 'from',
+2026-01-28 22:24:48.69
+0a2c1d16
+User
+help: null
+2026-01-28 22:24:48.69
+0a2c1d16
+User
+}
+2026-01-28 22:24:48.69
+0a2c1d16
+User
+message: 'The from address does not match a verified Sender Identity. Mail cannot be sent until this error is resolved. Visit https://sendgrid.com/docs/for-developers/sending-email/sender-identity/ to see the Sender Identity requirements',
+2026-01-28 22:24:48.69
+0a2c1d16
+User
+{
+2026-01-28 22:24:48.69
+0a2c1d16
+User
+}
+2026-01-28 22:24:48.69
+0a2c1d16
+User
+errors: [
+2026-01-28 22:24:48.69
+0a2c1d16
+User
+]
+2026-01-28 22:24:48.74
+0a2c1d16
+User
+'Bozena Mama: The from address does not match a verified Sender Identity. Mail cannot be sent until this error is resolved. Visit https://sendgrid.com/docs/for-developers/sending-email/sender-identity/ to see the Sender Identity requirements',
+2026-01-28 22:24:48.74
+0a2c1d16
+User
+errors: [
+2026-01-28 22:24:48.74
+0a2c1d16
+User
+'Barto Wafel: The from address does not match a verified Sender Identity. Mail cannot be sent until this error is resolved. Visit https://sendgrid.com/docs/for-developers/sending-email/sender-identity/ to see the Sender Identity requirements'
