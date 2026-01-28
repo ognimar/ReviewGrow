@@ -485,9 +485,9 @@ export default function Landing() {
             <div>
               <h4 className="font-semibold text-white mb-4">Prawne</h4>
               <ul className="space-y-2">
-                <li><Link href="/polityka-prywatnosci"><a className="text-gray-400 hover:text-white text-sm">Polityka prywatności</a></Link></li>
-                <li><Link href="/regulamin"><a className="text-gray-400 hover:text-white text-sm">Regulamin</a></Link></li>
-                <li><Link href="/polityka-cookies"><a className="text-gray-400 hover:text-white text-sm">Polityka cookies</a></Link></li>
+                <li><Link href="/polityka-prywatnosci" className="text-gray-400 hover:text-white text-sm">Polityka prywatności</Link></li>
+                <li><Link href="/regulamin" className="text-gray-400 hover:text-white text-sm">Regulamin</Link></li>
+                <li><Link href="/polityka-cookies" className="text-gray-400 hover:text-white text-sm">Polityka cookies</Link></li>
               </ul>
             </div>
           </div>

@@ -114,6 +114,14 @@ async function processUserFollowUps(userId: string, userData: any, baseUrl: stri
       const triggerDate = lastSentDate + (followUp.daysAfter * 24 * 60 * 60 * 1000);
       
       if (now >= triggerDate) {
+        // Re-check credit limit before each send (atomic check)
+        const userRefresh = await db.collection('users').doc(userId).get();
+        const freshSub = userRefresh.data()?.subscription;
+        if (freshSub && (freshSub.requestsUsed || 0) >= (freshSub.requestLimit || 0)) {
+          console.log(`[FollowUp] Stopping for ${userId} - credit limit reached during processing`);
+          break;
+        }
+
         let trackingSlug = client.trackingSlug;
         if (!trackingSlug) {
           trackingSlug = generateTrackingSlug();

@@ -120,6 +120,28 @@ Run `npm run dev` to start the development server on port 5000.
 - **Contact Review Grow** = Official business name (Bartosz Straszewski, NIP: 6472614652) used everywhere in the platform
 
 ## Recent Changes
+- 2026-01-28: SendGrid Email Integration and Email Follow-up System
+  - Created EmailService (server/services/emailService.ts) with SendGrid API integration
+  - Personalized email sending with {{name}}, {{first_name}}, {{google_link}} tags
+  - HTML email templates with professional styling and unsubscribe links
+  - Email Follow-up Scheduler (server/services/emailFollowUpScheduler.ts)
+    - Automated email sequences with configurable timing (days after initial contact)
+    - Subject and message customization per follow-up step
+    - Respects subscription limits and status checks
+  - SendGrid Webhooks (/api/sendgrid/webhook)
+    - Tracks delivered, open, click, bounce, unsubscribe events
+    - Auto-marks clients as BOUNCED or OPT_OUT based on events
+  - Email campaign support in campaign builder
+    - Subject field for email campaigns
+    - fromEmail, fromName, companyName configuration
+  - Settings page Email Follow-up section
+    - Configure sender email and name
+    - Up to 5 sequential email follow-ups
+    - Subject and message per email
+    - "Wyślij Teraz" manual trigger button
+  - Unsubscribe page (/unsubscribe/:slug) for GDPR compliance
+  - Credit system: each email deducts 1 credit (subscription.requestsUsed + emailUsed)
+  - Single trackingSlug used across SMS and Email for unified conversion tracking
 - 2026-01-27: Full Stripe subscription lifecycle implementation
   - Customer Billing Portal integration for self-service management
   - Cancel at period end support (subscription.status = 'canceling')

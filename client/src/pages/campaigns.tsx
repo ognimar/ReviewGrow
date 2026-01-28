@@ -54,6 +54,7 @@ export default function Campaigns() {
   const [campaignName, setCampaignName] = useState("");
   const [campaignType, setCampaignType] = useState<string>("");
   const [message, setMessage] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState<string>("none");
 
   const { data: campaigns = [], isLoading } = useQuery<Campaign[]>({
@@ -149,6 +150,7 @@ export default function Campaigns() {
     setCampaignName("");
     setCampaignType("");
     setMessage("");
+    setEmailSubject("");
     setSelectedTemplate("");
   };
 
@@ -165,6 +167,10 @@ export default function Campaigns() {
       toast({ title: 'Please enter a message', variant: 'destructive' });
       return;
     }
+    if (campaignType === 'email' && !emailSubject.trim()) {
+      toast({ title: 'Podaj temat e-maila', variant: 'destructive' });
+      return;
+    }
     if (clients.length === 0) {
       toast({ title: 'No clients available', description: 'Import clients first before creating a campaign', variant: 'destructive' });
       return;
@@ -174,6 +180,7 @@ export default function Campaigns() {
       name: campaignName,
       type: campaignType,
       message,
+      subject: campaignType === 'email' ? emailSubject : undefined,
       templateId: selectedTemplate && selectedTemplate !== "none" ? selectedTemplate : null,
       scheduled: null,
     });
@@ -248,6 +255,18 @@ export default function Campaigns() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {campaignType === 'email' && (
+                  <div className="space-y-2">
+                    <Label>Temat e-maila</Label>
+                    <Input 
+                      value={emailSubject}
+                      onChange={(e) => setEmailSubject(e.target.value)}
+                      placeholder="np. Prosimy o Twoją opinię"
+                      data-testid="input-email-subject"
+                    />
+                  </div>
+                )}
 
                 {templates.length > 0 && (
                   <div className="space-y-2">

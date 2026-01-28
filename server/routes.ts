@@ -11,6 +11,8 @@ import { sendSMS, sendMMS } from "./services/smsService";
 import { generateAuthUrl, exchangeCodeForTokens, getAccounts, getLocations, getReviews, generateReviewLink, refreshAccessToken, replyToReview } from "./services/googleBusinessService";
 import { generateAIReply } from "./services/aiReplyService";
 import { personalizeImageFromUrl, uploadToFirebaseStorage, deleteFromFirebaseStorage, extractStoragePathFromUrl } from "./services/imageService";
+import { sendPersonalizedEmail, sendBulkEmails, isEmailConfigured } from "./services/emailService";
+import { runEmailFollowUpNow } from "./services/emailFollowUpScheduler";
 import Stripe from "stripe";
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -244,7 +246,7 @@ export async function registerRoutes(
   // Create Campaign
   app.post("/api/campaigns", authenticate, async (req: AuthRequest, res) => {
     try {
-      const { name, type, message, templateId, scheduled } = req.body;
+      const { name, type, message, subject, templateId, scheduled, fromEmail, fromName, companyName } = req.body;
 
       const db = getFirestore();
       if (!db) {
@@ -257,7 +259,7 @@ export async function registerRoutes(
       
       const recipientCount = clientsSnapshot.size;
 
-      const campaignRef = await db.collection('campaigns').add({
+      const campaignData: any = {
         name,
         type,
         message,
@@ -269,7 +271,16 @@ export async function registerRoutes(
         failedCount: 0,
         ownerId: req.user!.uid,
         createdAt: new Date().toISOString(),
-      });
+      };
+      
+      if (type === 'email') {
+        campaignData.subject = subject || 'Prosimy o opinię';
+        if (fromEmail) campaignData.fromEmail = fromEmail;
+        if (fromName) campaignData.fromName = fromName;
+        if (companyName) campaignData.companyName = companyName;
+      }
+
+      const campaignRef = await db.collection('campaigns').add(campaignData);
 
       res.json({ id: campaignRef.id, success: true });
     } catch (error) {
@@ -564,12 +575,33 @@ export async function registerRoutes(
             errors.push(`${client.name}: ${result.error}`);
           }
         } else if (campaign.type === 'email' && client.email) {
-          sentCount++;
-          // Update client status to SENT for email too
-          await db.collection('clients').doc(client.id).update({
-            status: 'SENT',
-            lastSentAt: new Date().toISOString(),
-          });
+          // Send actual email via SendGrid
+          const result = await sendPersonalizedEmail(
+            {
+              email: client.email,
+              name: client.name || 'Klient',
+              trackingSlug,
+              clientId: client.id,
+            },
+            campaign.subject || 'Prosimy o opinię',
+            campaign.message,
+            campaign.fromEmail || userData?.email || 'noreply@contactreviewgrow.pl',
+            campaign.fromName || userData?.displayName || 'Contact Review Grow',
+            campaign.companyName || userData?.companyName
+          );
+          
+          if (result.success) {
+            sentCount++;
+            await db.collection('clients').doc(client.id).update({
+              status: 'SENT',
+              lastSentAt: new Date().toISOString(),
+              lastEmailSentAt: new Date().toISOString(),
+              emailStatus: 'SENT',
+            });
+          } else {
+            failedCount++;
+            errors.push(`${client.name}: ${result.error}`);
+          }
         } else {
           failedCount++;
         }
@@ -1364,8 +1396,7 @@ export async function registerRoutes(
           console.log('[BillingStatus] Stripe subscription:', {
             status: stripeSubscription.status,
             cancel_at_period_end: stripeSubscription.cancel_at_period_end,
-            cancel_at: stripeSubscription.cancel_at,
-            current_period_end: stripeSubscription.current_period_end
+            cancel_at: stripeSubscription.cancel_at
           });
           const updates: any = {};
           let needsUpdate = false;
@@ -2154,6 +2185,197 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error('Process follow-ups error:', error);
       res.status(500).json({ error: error.message || 'Failed to process follow-ups' });
+    }
+  });
+
+  // Email Follow-up Settings
+  app.get("/api/email-follow-up/settings", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const userDoc = await db.collection('users').doc(req.user!.uid).get();
+      const userData = userDoc.data();
+
+      res.json(userData?.emailFollowUpSettings || {
+        enabled: false,
+        messages: [
+          { enabled: true, daysAfter: 3, subject: 'Przypomnienie: Prosimy o opinię', message: 'Cześć {{name}},\n\nKilka dni temu kontaktowaliśmy się z Tobą. Czy mógłbyś poświęcić chwilę na wystawienie nam opinii?\n\nDziękujemy!' },
+          { enabled: true, daysAfter: 7, subject: 'Ostatnie przypomnienie', message: 'Cześć {{name}},\n\nTo nasze ostatnie przypomnienie. Twoja opinia jest dla nas bardzo ważna.\n\nDziękujemy za Twój czas!' },
+        ],
+        fromEmail: '',
+        fromName: '',
+        companyName: '',
+      });
+    } catch (error) {
+      console.error('Get email follow-up settings error:', error);
+      res.status(500).json({ error: 'Failed to get settings' });
+    }
+  });
+
+  app.put("/api/email-follow-up/settings", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const { enabled, messages, fromEmail, fromName, companyName } = req.body;
+
+      await db.collection('users').doc(req.user!.uid).update({
+        emailFollowUpSettings: {
+          enabled: !!enabled,
+          messages: messages || [],
+          fromEmail: fromEmail || '',
+          fromName: fromName || '',
+          companyName: companyName || '',
+        },
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Update email follow-up settings error:', error);
+      res.status(500).json({ error: 'Failed to update settings' });
+    }
+  });
+
+  // Manually trigger email follow-up processing
+  app.post("/api/email-follow-up/process", authenticate, async (req: AuthRequest, res) => {
+    try {
+      await runEmailFollowUpNow();
+      res.json({ success: true, message: 'Email follow-up processing triggered' });
+    } catch (error: any) {
+      console.error('Process email follow-ups error:', error);
+      res.status(500).json({ error: error.message || 'Failed to process email follow-ups' });
+    }
+  });
+
+  // SendGrid Webhook for email tracking
+  app.post("/api/sendgrid/webhook", async (req, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const events = req.body;
+      
+      if (!Array.isArray(events)) {
+        return res.status(400).json({ error: 'Invalid payload' });
+      }
+
+      console.log(`[SendGrid Webhook] Received ${events.length} events`);
+
+      for (const event of events) {
+        const { email, event: eventType, sg_message_id } = event;
+        
+        if (!email) continue;
+
+        // Find client by email
+        const clientsSnapshot = await db.collection('clients')
+          .where('email', '==', email)
+          .limit(1)
+          .get();
+
+        if (clientsSnapshot.empty) continue;
+
+        const clientDoc = clientsSnapshot.docs[0];
+        const updates: any = {};
+
+        switch (eventType) {
+          case 'delivered':
+            updates.emailStatus = 'DELIVERED';
+            updates.emailDeliveredAt = new Date().toISOString();
+            break;
+          case 'open':
+            updates.emailStatus = 'OPENED';
+            updates.emailOpenedAt = new Date().toISOString();
+            break;
+          case 'click':
+            updates.emailStatus = 'CLICKED';
+            updates.status = 'CLICKED';
+            updates.emailClickedAt = new Date().toISOString();
+            break;
+          case 'bounce':
+          case 'dropped':
+            updates.emailStatus = 'BOUNCED';
+            updates.emailBouncedAt = new Date().toISOString();
+            break;
+          case 'unsubscribe':
+          case 'spamreport':
+            updates.emailStatus = 'OPT_OUT';
+            updates.emailOptOutAt = new Date().toISOString();
+            break;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await clientDoc.ref.update(updates);
+          console.log(`[SendGrid Webhook] Updated client ${email}: ${eventType}`);
+        }
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('SendGrid webhook error:', error);
+      res.status(500).json({ error: 'Webhook processing failed' });
+    }
+  });
+
+  // Check if email is configured
+  app.get("/api/email/status", authenticate, async (req: AuthRequest, res) => {
+    res.json({ configured: isEmailConfigured() });
+  });
+
+  // Unsubscribe endpoint for email opt-out
+  app.get("/unsubscribe/:slug", async (req, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).send('Service unavailable');
+      }
+
+      const { slug } = req.params;
+      
+      const clientsSnapshot = await db.collection('clients')
+        .where('trackingSlug', '==', slug)
+        .limit(1)
+        .get();
+
+      if (!clientsSnapshot.empty) {
+        const clientDoc = clientsSnapshot.docs[0];
+        await clientDoc.ref.update({
+          emailStatus: 'OPT_OUT',
+          emailOptOutAt: new Date().toISOString(),
+        });
+      }
+
+      res.send(`
+        <!DOCTYPE html>
+        <html lang="pl">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Wypisano z listy</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f3f4f6; }
+            .container { text-align: center; padding: 40px; background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 400px; }
+            h1 { color: #059669; margin-bottom: 16px; }
+            p { color: #6b7280; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Wypisano z listy</h1>
+            <p>Nie będziesz już otrzymywać od nas wiadomości email.</p>
+          </div>
+        </body>
+        </html>
+      `);
+    } catch (error) {
+      console.error('Unsubscribe error:', error);
+      res.status(500).send('Wystąpił błąd');
     }
   });
 
