@@ -1,9 +1,172 @@
 import sharp from 'sharp';
-import { getStorage } from '../firebase';
+import { getStorage, getFirestore } from '../firebase';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import * as https from 'https';
 import * as http from 'http';
+
+export interface StorageFileRecord {
+  storagePath: string;
+  url: string;
+  ownerId: string;
+  type: 'campaign' | 'followup' | 'email_followup' | 'template';
+  relatedEntityId?: string;
+  fileName: string;
+  size: number;
+  createdAt: string;
+}
+
+export async function trackStorageFile(
+  storagePath: string,
+  url: string,
+  ownerId: string,
+  type: StorageFileRecord['type'],
+  fileName: string,
+  size: number,
+  relatedEntityId?: string
+): Promise<string> {
+  const db = getFirestore();
+  const record: StorageFileRecord = {
+    storagePath,
+    url,
+    ownerId,
+    type,
+    fileName,
+    size,
+    createdAt: new Date().toISOString(),
+    ...(relatedEntityId && { relatedEntityId }),
+  };
+  
+  const docRef = await db.collection('storageFiles').add(record);
+  return docRef.id;
+}
+
+export async function deleteStorageFilesByOwner(ownerId: string): Promise<number> {
+  const db = getFirestore();
+  const storage = getStorage();
+  if (!storage) return 0;
+
+  const snapshot = await db.collection('storageFiles')
+    .where('ownerId', '==', ownerId)
+    .get();
+
+  let deleted = 0;
+  const bucket = storage.bucket();
+
+  for (const doc of snapshot.docs) {
+    const data = doc.data();
+    try {
+      await bucket.file(data.storagePath).delete();
+      await doc.ref.delete();
+      deleted++;
+    } catch (error: any) {
+      if (error.code === 404) {
+        await doc.ref.delete();
+        deleted++;
+      } else {
+        console.error(`Failed to delete ${data.storagePath}:`, error);
+      }
+    }
+  }
+
+  return deleted;
+}
+
+export async function deleteStorageFilesByEntity(
+  ownerId: string,
+  type: StorageFileRecord['type'],
+  relatedEntityId: string
+): Promise<number> {
+  const db = getFirestore();
+  const storage = getStorage();
+  if (!storage) return 0;
+
+  const snapshot = await db!.collection('storageFiles')
+    .where('ownerId', '==', ownerId)
+    .where('type', '==', type)
+    .where('relatedEntityId', '==', relatedEntityId)
+    .get();
+
+  let deleted = 0;
+  const bucket = storage.bucket();
+
+  for (const doc of snapshot.docs) {
+    const data = doc.data();
+    try {
+      await bucket.file(data.storagePath).delete();
+      await doc.ref.delete();
+      deleted++;
+    } catch (error: any) {
+      if (error.code === 404) {
+        await doc.ref.delete();
+        deleted++;
+      } else {
+        console.error(`Failed to delete ${data.storagePath}:`, error);
+      }
+    }
+  }
+
+  return deleted;
+}
+
+export async function getStorageFilesByOwner(ownerId: string): Promise<(StorageFileRecord & { id: string })[]> {
+  const db = getFirestore();
+  if (!db) return [];
+  
+  try {
+    // Try with ordering first (requires composite index: ownerId + createdAt)
+    const snapshot = await db.collection('storageFiles')
+      .where('ownerId', '==', ownerId)
+      .orderBy('createdAt', 'desc')
+      .get();
+
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data() as StorageFileRecord,
+    }));
+  } catch (error: any) {
+    // Fallback without ordering if index doesn't exist
+    if (error.code === 9 || error.message?.includes('index')) {
+      console.warn('Firestore index not available for storageFiles, falling back to unordered query');
+      const snapshot = await db.collection('storageFiles')
+        .where('ownerId', '==', ownerId)
+        .get();
+
+      const files = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data() as StorageFileRecord,
+      }));
+      
+      // Sort in memory
+      return files.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+    throw error;
+  }
+}
+
+export async function deleteStorageFileById(fileId: string, ownerId: string): Promise<boolean> {
+  const db = getFirestore();
+  const storage = getStorage();
+  if (!storage) return false;
+
+  const doc = await db.collection('storageFiles').doc(fileId).get();
+  if (!doc.exists) return false;
+
+  const data = doc.data() as StorageFileRecord;
+  if (data.ownerId !== ownerId) return false;
+
+  try {
+    const bucket = storage.bucket();
+    await bucket.file(data.storagePath).delete();
+  } catch (error: any) {
+    if (error.code !== 404) {
+      console.error(`Failed to delete storage file:`, error);
+    }
+  }
+
+  await doc.ref.delete();
+  return true;
+}
 
 async function fetchImageBuffer(url: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -148,7 +311,7 @@ export async function uploadToFirebaseStorage(
   buffer: Buffer,
   userId: string,
   fileName: string
-): Promise<{ url: string; storagePath: string }> {
+): Promise<{ url: string; storagePath: string; size: number }> {
   const storage = getStorage();
   if (!storage) {
     throw new Error('Firebase Storage not initialized');
@@ -176,7 +339,7 @@ export async function uploadToFirebaseStorage(
   });
 
   const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
-  return { url: publicUrl, storagePath };
+  return { url: publicUrl, storagePath, size: buffer.length };
 }
 
 export async function deleteFromFirebaseStorage(storagePath: string): Promise<void> {

@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2, Link2, Unlink, MapPin, Star, ExternalLink, Building2, Bot, Sparkles, Play, MessageSquare, Clock, Send, Mail } from "lucide-react";
+import { Loader2, Link2, Unlink, MapPin, Star, ExternalLink, Building2, Bot, Sparkles, Play, MessageSquare, Clock, Send, Mail, HardDrive, Trash2, Image, FileText, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
@@ -46,6 +46,18 @@ interface EmailFollowUpSettings {
   fromEmail: string;
   fromName: string;
   companyName: string;
+}
+
+interface StorageFile {
+  id: string;
+  storagePath: string;
+  url: string;
+  ownerId: string;
+  type: 'campaign' | 'followup' | 'email_followup' | 'template';
+  relatedEntityId?: string;
+  fileName: string;
+  size: number;
+  createdAt: string;
 }
 
 interface GoogleStatus {
@@ -365,6 +377,60 @@ export default function Settings() {
     const updated = [...emailFollowUpMessages];
     updated[index] = { ...updated[index], [field]: value };
     setEmailFollowUpMessages(updated);
+  };
+
+  // Storage Management
+  const { data: storageData, isLoading: storageLoading, refetch: refetchStorage } = useQuery<{ files: StorageFile[], totalSize: number, totalCount: number }>({
+    queryKey: ['storage-files'],
+    queryFn: async () => {
+      const response = await fetch('/api/storage/files', {
+        headers: { 'Authorization': `Bearer ${await user?.getIdToken()}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch storage files');
+      return response.json();
+    },
+  });
+
+  const deleteStorageFileMutation = useMutation({
+    mutationFn: async (fileId: string) => {
+      const response = await fetch(`/api/storage/files/${fileId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${await user?.getIdToken()}` },
+      });
+      if (!response.ok) throw new Error('Failed to delete file');
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Plik usunięty' });
+      refetchStorage();
+    },
+    onError: () => {
+      toast({ title: 'Nie udało się usunąć pliku', variant: 'destructive' });
+    },
+  });
+
+  const deleteAllStorageFilesMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/storage/files', {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${await user?.getIdToken()}` },
+      });
+      if (!response.ok) throw new Error('Failed to delete files');
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: `Usunięto ${data.deletedCount} plików` });
+      refetchStorage();
+    },
+    onError: () => {
+      toast({ title: 'Nie udało się usunąć plików', variant: 'destructive' });
+    },
+  });
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
   const saveFollowUpMutation = useMutation({
@@ -1156,6 +1222,118 @@ export default function Settings() {
                     <li>System automatycznie śledzi otwarcia i kliknięcia</li>
                     <li>Każdy e-mail kosztuje 1 kredyt</li>
                   </ul>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Storage Management */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <HardDrive className="h-5 w-5" />
+              Zarządzanie Storage
+            </CardTitle>
+            <CardDescription>
+              Kontroluj pliki przechowywane w Firebase Storage (obrazy kampanii, follow-upów)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {storageLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-6 p-4 bg-muted/50 rounded-lg">
+                  <div>
+                    <p className="text-lg font-semibold">
+                      {storageData?.totalCount || 0} plików
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Łącznie: {formatFileSize(storageData?.totalSize || 0)}
+                    </p>
+                  </div>
+                  {(storageData?.totalCount || 0) > 0 && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => {
+                        if (confirm('Czy na pewno chcesz usunąć wszystkie pliki? Ta operacja jest nieodwracalna.')) {
+                          deleteAllStorageFilesMutation.mutate();
+                        }
+                      }}
+                      disabled={deleteAllStorageFilesMutation.isPending}
+                      data-testid="button-delete-all-storage"
+                    >
+                      {deleteAllStorageFilesMutation.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="mr-2 h-4 w-4" />
+                      )}
+                      Usuń wszystkie
+                    </Button>
+                  )}
+                </div>
+
+                {(storageData?.files?.length || 0) > 0 ? (
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {storageData?.files.map((file) => (
+                      <div 
+                        key={file.id} 
+                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/30"
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          {file.fileName.endsWith('.jpg') || file.fileName.endsWith('.jpeg') || file.fileName.endsWith('.png') ? (
+                            <Image className="h-5 w-5 text-blue-500 flex-shrink-0" />
+                          ) : (
+                            <FileText className="h-5 w-5 text-gray-500 flex-shrink-0" />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate" title={file.fileName}>
+                              {file.fileName}
+                            </p>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Badge variant="outline" className="text-xs">
+                                {file.type === 'campaign' ? 'Kampania' : 
+                                 file.type === 'followup' ? 'Follow-up SMS' :
+                                 file.type === 'email_followup' ? 'Follow-up Email' : 'Szablon'}
+                              </Badge>
+                              <span>{formatFileSize(file.size)}</span>
+                              <span>{new Date(file.createdAt).toLocaleDateString('pl-PL')}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => deleteStorageFileMutation.mutate(file.id)}
+                          disabled={deleteStorageFileMutation.isPending}
+                          data-testid={`button-delete-file-${file.id}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-500" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <HardDrive className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>Brak plików w storage</p>
+                    <p className="text-sm">Pliki będą tworzone podczas wysyłania kampanii z obrazami</p>
+                  </div>
+                )}
+
+                <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-950 rounded-lg flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-medium text-amber-800 dark:text-amber-200">Uwaga</p>
+                    <p className="text-amber-700 dark:text-amber-300">
+                      Pliki wygenerowane przed wdrożeniem systemu śledzenia nie są tutaj widoczne. 
+                      Możesz je usunąć bezpośrednio w konsoli Firebase Storage.
+                    </p>
+                  </div>
                 </div>
               </>
             )}

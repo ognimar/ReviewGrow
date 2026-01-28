@@ -10,7 +10,7 @@ import { generatePersonalizedImages } from "./services/imageService";
 import { sendSMS, sendMMS } from "./services/smsService";
 import { generateAuthUrl, exchangeCodeForTokens, getAccounts, getLocations, getReviews, generateReviewLink, refreshAccessToken, replyToReview } from "./services/googleBusinessService";
 import { generateAIReply } from "./services/aiReplyService";
-import { personalizeImageFromUrl, uploadToFirebaseStorage, deleteFromFirebaseStorage, extractStoragePathFromUrl } from "./services/imageService";
+import { personalizeImageFromUrl, uploadToFirebaseStorage, deleteFromFirebaseStorage, extractStoragePathFromUrl, trackStorageFile, getStorageFilesByOwner, deleteStorageFileById, deleteStorageFilesByOwner } from "./services/imageService";
 import { sendPersonalizedEmail, sendBulkEmails, isEmailConfigured } from "./services/emailService";
 import { runEmailFollowUpNow } from "./services/emailFollowUpScheduler";
 import Stripe from "stripe";
@@ -211,6 +211,10 @@ export async function registerRoutes(
         return res.status(403).json({ error: 'Not authorized' });
       }
 
+      // Clean up storage files associated with this client (follow-up images)
+      const { deleteStorageFilesByEntity } = await import('./services/imageService');
+      await deleteStorageFilesByEntity(req.user!.uid, 'followup', req.params.id);
+
       await clientRef.delete();
       res.json({ success: true });
     } catch (error) {
@@ -331,6 +335,10 @@ export async function registerRoutes(
       if (campaignDoc.data()?.ownerId !== req.user!.uid) {
         return res.status(403).json({ error: 'Not authorized' });
       }
+
+      // Clean up storage files associated with this campaign
+      const { deleteStorageFilesByEntity } = await import('./services/imageService');
+      await deleteStorageFilesByEntity(req.user!.uid, 'campaign', req.params.id);
 
       await campaignRef.delete();
       res.json({ success: true });
@@ -507,11 +515,14 @@ export async function registerRoutes(
               true // forMMS - compress for MMS size limits (<100KB)
             );
             // Upload to Firebase Storage to get public URL
-            const { url: imageUrl } = await uploadToFirebaseStorage(
+            const fileName = `campaign_${campaign.name.replace(/\s+/g, '_')}_${client.name?.replace(/\s+/g, '_') || 'client'}.jpg`;
+            const { url: imageUrl, storagePath, size } = await uploadToFirebaseStorage(
               imageBuffer,
               req.user!.uid,
-              `campaign_${campaign.name.replace(/\s+/g, '_')}_${client.name?.replace(/\s+/g, '_') || 'client'}.jpg`
+              fileName
             );
+            // Track file in storage
+            await trackStorageFile(storagePath, imageUrl, req.user!.uid, 'campaign', fileName, size, campaignId);
             clientImageUrls.set(client.id, imageUrl);
             console.log(`Generated image for ${client.name}: ${imageBuffer.length} bytes -> ${imageUrl}`);
           } catch (e: any) {
@@ -552,11 +563,13 @@ export async function registerRoutes(
             // Upload text message as file for SMIL
             const cleanMessage = personalizedMessage.replace(/\{\{image\}\}/g, '').trim();
             const textBuffer = Buffer.from(cleanMessage, 'utf-8');
-            const { url: textUrl } = await uploadToFirebaseStorage(
+            const textFileName = `campaign_${campaign.name.replace(/\s+/g, '_')}_${client.name?.replace(/\s+/g, '_') || 'client'}.txt`;
+            const { url: textUrl, storagePath: textStoragePath, size: textSize } = await uploadToFirebaseStorage(
               textBuffer,
               req.user!.uid,
-              `campaign_${campaign.name.replace(/\s+/g, '_')}_${client.name?.replace(/\s+/g, '_') || 'client'}.txt`
+              textFileName
             );
+            await trackStorageFile(textStoragePath, textUrl, req.user!.uid, 'campaign', textFileName, textSize, campaignId);
             result = await sendMMS(client.phone, personalizedMessage, imageUrl, textUrl);
           } else {
             // Use regular SMS (remove {{image}} placeholder if present but no image)
@@ -1506,6 +1519,9 @@ export async function registerRoutes(
           });
           await file.makePublic();
           imageUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
+          
+          // Track file in storageFiles (templateId will be added after document creation)
+          // For templates, we'll track after the document is created to get the ID
         } catch (storageError: any) {
           console.error('Storage upload error:', storageError);
           return res.status(500).json({ 
@@ -1524,6 +1540,22 @@ export async function registerRoutes(
         ownerId: req.user!.uid,
         createdAt: new Date().toISOString(),
       });
+
+      // Track template image in storageFiles
+      if (imageUrl && req.file) {
+        const storagePath = extractStoragePathFromUrl(imageUrl);
+        if (storagePath) {
+          await trackStorageFile(
+            storagePath,
+            imageUrl,
+            req.user!.uid,
+            'template',
+            req.file.originalname,
+            req.file.size,
+            templateRef.id
+          );
+        }
+      }
 
       res.json({ id: templateRef.id, success: true });
     } catch (error) {
@@ -1575,7 +1607,7 @@ export async function registerRoutes(
         return res.status(403).json({ error: 'Not authorized' });
       }
 
-      // Delete the image from Firebase Storage
+      // Delete the image from Firebase Storage and storageFiles tracking
       const templateData = templateDoc.data();
       if (templateData?.imageUrl) {
         const storagePath = extractStoragePathFromUrl(templateData.imageUrl);
@@ -1587,6 +1619,10 @@ export async function registerRoutes(
           }
         }
       }
+      
+      // Clean up storageFiles tracking records for this template
+      const { deleteStorageFilesByEntity } = await import('./services/imageService');
+      await deleteStorageFilesByEntity(req.user!.uid, 'template', req.params.id);
 
       await templateRef.delete();
       res.json({ success: true });
@@ -2376,6 +2412,46 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Unsubscribe error:', error);
       res.status(500).send('Wystąpił błąd');
+    }
+  });
+
+  // Storage Management API
+  app.get("/api/storage/files", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const files = await getStorageFilesByOwner(req.user!.uid);
+      const totalSize = files.reduce((sum, f) => sum + (f.size || 0), 0);
+      res.json({ 
+        files, 
+        totalSize,
+        totalCount: files.length 
+      });
+    } catch (error) {
+      console.error('Get storage files error:', error);
+      res.status(500).json({ error: 'Failed to get storage files' });
+    }
+  });
+
+  app.delete("/api/storage/files/:fileId", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const success = await deleteStorageFileById(req.params.fileId, req.user!.uid);
+      if (success) {
+        res.json({ success: true });
+      } else {
+        res.status(404).json({ error: 'File not found or access denied' });
+      }
+    } catch (error) {
+      console.error('Delete storage file error:', error);
+      res.status(500).json({ error: 'Failed to delete file' });
+    }
+  });
+
+  app.delete("/api/storage/files", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const deleted = await deleteStorageFilesByOwner(req.user!.uid);
+      res.json({ success: true, deletedCount: deleted });
+    } catch (error) {
+      console.error('Delete all storage files error:', error);
+      res.status(500).json({ error: 'Failed to delete files' });
     }
   });
 

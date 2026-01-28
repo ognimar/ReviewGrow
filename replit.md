@@ -120,6 +120,15 @@ Run `npm run dev` to start the development server on port 5000.
 - **Contact Review Grow** = Official business name (Bartosz Straszewski, NIP: 6472614652) used everywhere in the platform
 
 ## Recent Changes
+- 2026-01-28: Firebase Storage Management System
+  - Added storageFiles collection to track uploaded files
+  - Files automatically tracked when uploaded (campaign images, follow-up MMS)
+  - Automatic cleanup when deleting campaigns or clients (removes associated files)
+  - Storage Management UI in Settings page
+    - View all tracked files with size and type
+    - Delete individual files or all files at once
+    - Shows total storage usage
+  - API endpoints: GET/DELETE /api/storage/files, DELETE /api/storage/files/:id
 - 2026-01-28: SendGrid Email Integration and Email Follow-up System
   - Created EmailService (server/services/emailService.ts) with SendGrid API integration
   - Personalized email sending with {{name}}, {{first_name}}, {{google_link}} tags

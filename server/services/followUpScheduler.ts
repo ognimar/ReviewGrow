@@ -1,6 +1,6 @@
 import { getFirestore } from "../firebase";
 import { sendSMS, sendMMS } from "./smsService";
-import { personalizeImageFromUrl, uploadToFirebaseStorage } from "./imageService";
+import { personalizeImageFromUrl, uploadToFirebaseStorage, trackStorageFile } from "./imageService";
 import { FieldValue } from "firebase-admin/firestore";
 
 const PROCESS_INTERVAL_MS = 60 * 60 * 1000; // Check every hour
@@ -154,20 +154,24 @@ async function processUserFollowUps(userId: string, userData: any, baseUrl: stri
             );
             
             // Upload image to Firebase Storage
-            const { url: imageUrl } = await uploadToFirebaseStorage(
+            const imgFileName = `followup_${Date.now()}_${client.name?.replace(/\s+/g, '_') || 'client'}.jpg`;
+            const { url: imageUrl, storagePath: imgStoragePath, size: imgSize } = await uploadToFirebaseStorage(
               imageBuffer,
               userId,
-              `followup_${Date.now()}_${client.name?.replace(/\s+/g, '_') || 'client'}.jpg`
+              imgFileName
             );
+            await trackStorageFile(imgStoragePath, imageUrl, userId, 'followup', imgFileName, imgSize, clientId);
 
             // Send MMS with image - upload text as file for SMIL
             const cleanMessage = personalizedMessage.replace(/\{\{image\}\}/g, '').trim();
             const textBuffer = Buffer.from(cleanMessage, 'utf-8');
-            const { url: textUrl } = await uploadToFirebaseStorage(
+            const txtFileName = `followup_${Date.now()}_${client.name?.replace(/\s+/g, '_') || 'client'}.txt`;
+            const { url: textUrl, storagePath: txtStoragePath, size: txtSize } = await uploadToFirebaseStorage(
               textBuffer,
               userId,
-              `followup_${Date.now()}_${client.name?.replace(/\s+/g, '_') || 'client'}.txt`
+              txtFileName
             );
+            await trackStorageFile(txtStoragePath, textUrl, userId, 'followup', txtFileName, txtSize, clientId);
             
             result = await sendMMS(client.phone, cleanMessage, imageUrl, textUrl);
             console.log(`[FollowUp] Sent MMS with personalized image to ${client.name}`);
