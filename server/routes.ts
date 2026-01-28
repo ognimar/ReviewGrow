@@ -704,7 +704,8 @@ export async function registerRoutes(
 
       // Get subscription-based quotas
       const subscription = userData?.subscription;
-      const hasActiveSubscription = subscription && subscription.status === 'active';
+      // 'canceling' means subscription is still valid until period end
+      const hasActiveSubscription = subscription && ['active', 'canceling'].includes(subscription.status);
       
       // Check if subscription is expired
       const isExpired = subscription && new Date(subscription.expiresAt) < new Date();
