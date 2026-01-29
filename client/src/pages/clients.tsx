@@ -63,6 +63,7 @@ export default function Clients() {
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newEmail, setNewEmail] = useState("");
+  const [hasConsent, setHasConsent] = useState(false);
   const [viewingComplaint, setViewingComplaint] = useState<Client | null>(null);
 
   const { data: clients = [], isLoading } = useQuery<Client[]>({
@@ -112,6 +113,7 @@ export default function Clients() {
       setNewName('');
       setNewPhone('');
       setNewEmail('');
+      setHasConsent(false);
     },
     onError: (error: any) => {
       toast({ 
@@ -265,13 +267,26 @@ export default function Clients() {
                   <p className="text-xs text-muted-foreground">
                     * Wymagane jest imię i nazwisko oraz telefon lub email
                   </p>
+                  <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border">
+                    <input
+                      type="checkbox"
+                      id="consent-checkbox"
+                      checked={hasConsent}
+                      onChange={(e) => setHasConsent(e.target.checked)}
+                      className="mt-1 h-4 w-4 rounded border-gray-300"
+                      data-testid="checkbox-consent"
+                    />
+                    <label htmlFor="consent-checkbox" className="text-sm text-gray-700 cursor-pointer">
+                      Posiadam wymaganą zgodę na kontakt z tym klientem przez email lub SMS
+                    </label>
+                  </div>
                   <div className="flex justify-end gap-2">
                     <Button variant="outline" onClick={() => setIsAddOpen(false)}>
                       Anuluj
                     </Button>
                     <Button
                       onClick={() => addMutation.mutate({ name: newName, phone: newPhone, email: newEmail })}
-                      disabled={addMutation.isPending || !newName.trim() || (!newPhone.trim() && !newEmail.trim())}
+                      disabled={addMutation.isPending || !newName.trim() || (!newPhone.trim() && !newEmail.trim()) || !hasConsent}
                       data-testid="button-save-new-client"
                     >
                       {addMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Dodaj'}
