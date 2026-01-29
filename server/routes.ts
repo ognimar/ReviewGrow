@@ -157,6 +157,48 @@ export async function registerRoutes(
     }
   });
 
+  // Add Single Client
+  app.post("/api/clients", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const { name, phone, email } = req.body;
+      
+      if (!name || !name.trim()) {
+        return res.status(400).json({ error: 'Name is required' });
+      }
+      
+      if (!phone && !email) {
+        return res.status(400).json({ error: 'Phone or email is required' });
+      }
+
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const trackingSlug = generateTrackingSlug();
+      const clientData = {
+        name: name.trim(),
+        phone: phone?.trim() || '',
+        email: email?.trim() || '',
+        ownerId: req.user!.uid,
+        status: 'NEW',
+        trackingSlug,
+        createdAt: new Date().toISOString(),
+      };
+
+      const docRef = await db.collection('clients').add(clientData);
+
+      res.json({
+        success: true,
+        id: docRef.id,
+        ...clientData,
+      });
+    } catch (error) {
+      console.error('Add client error:', error);
+      res.status(500).json({ error: 'Failed to add client' });
+    }
+  });
+
   // Update Client
   app.patch("/api/clients/:id", authenticate, async (req: AuthRequest, res) => {
     try {

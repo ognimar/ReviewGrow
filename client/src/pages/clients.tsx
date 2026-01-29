@@ -2,7 +2,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Upload, FileDown, Search, Loader2, Users, Pencil, Trash2, Heart, MessageCircle, Star } from "lucide-react";
+import { Upload, FileDown, Search, Loader2, Users, Pencil, Trash2, Heart, MessageCircle, Star, UserPlus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -55,10 +55,14 @@ export default function Clients() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editEmail, setEditEmail] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [newEmail, setNewEmail] = useState("");
   const [viewingComplaint, setViewingComplaint] = useState<Client | null>(null);
 
   const { data: clients = [], isLoading } = useQuery<Client[]>({
@@ -81,6 +85,39 @@ export default function Clients() {
         title: 'Import failed',
         description: error.message || 'Failed to import CSV file',
         variant: 'destructive',
+      });
+    },
+  });
+
+  const addMutation = useMutation({
+    mutationFn: async ({ name, phone, email }: { name: string; phone: string; email: string }) => {
+      const response = await fetch('/api/clients', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await user?.getIdToken()}`
+        },
+        body: JSON.stringify({ name, phone, email }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to add client');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Kontakt dodany pomyślnie' });
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      setIsAddOpen(false);
+      setNewName('');
+      setNewPhone('');
+      setNewEmail('');
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: 'Błąd', 
+        description: error.message || 'Nie udało się dodać kontaktu',
+        variant: 'destructive' 
       });
     },
   });
@@ -180,6 +217,69 @@ export default function Clients() {
             <Button variant="outline" data-testid="button-export">
               <FileDown className="mr-2 h-4 w-4" /> Export
             </Button>
+            <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" data-testid="button-add-client">
+                  <UserPlus className="mr-2 h-4 w-4" /> Dodaj kontakt
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Dodaj nowy kontakt</DialogTitle>
+                  <DialogDescription>
+                    Wprowadź dane nowego kontaktu
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-name">Imię i nazwisko *</Label>
+                    <Input
+                      id="new-name"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      placeholder="Jan Kowalski"
+                      data-testid="input-new-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="new-phone">Telefon</Label>
+                    <Input
+                      id="new-phone"
+                      value={newPhone}
+                      onChange={(e) => setNewPhone(e.target.value)}
+                      placeholder="+48 123 456 789"
+                      data-testid="input-new-phone"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="new-email">Email</Label>
+                    <Input
+                      id="new-email"
+                      type="email"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      placeholder="jan@example.com"
+                      data-testid="input-new-email"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    * Wymagane jest imię i nazwisko oraz telefon lub email
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setIsAddOpen(false)}>
+                      Anuluj
+                    </Button>
+                    <Button
+                      onClick={() => addMutation.mutate({ name: newName, phone: newPhone, email: newEmail })}
+                      disabled={addMutation.isPending || !newName.trim() || (!newPhone.trim() && !newEmail.trim())}
+                      data-testid="button-save-new-client"
+                    >
+                      {addMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Dodaj'}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
             <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
               <DialogTrigger asChild>
                 <Button data-testid="button-import-csv">
@@ -251,11 +351,16 @@ export default function Clients() {
             ) : filteredClients.length === 0 ? (
               <div className="text-center py-12">
                 <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium mb-2">No clients yet</h3>
-                <p className="text-muted-foreground mb-4">Import a CSV file to add your first clients.</p>
-                <Button onClick={() => setIsImportOpen(true)} data-testid="button-import-empty">
-                  <Upload className="mr-2 h-4 w-4" /> Import CSV
-                </Button>
+                <h3 className="text-lg font-medium mb-2">Brak kontaktów</h3>
+                <p className="text-muted-foreground mb-4">Dodaj kontakt ręcznie lub zaimportuj z pliku CSV.</p>
+                <div className="flex justify-center gap-2">
+                  <Button variant="outline" onClick={() => setIsAddOpen(true)} data-testid="button-add-empty">
+                    <UserPlus className="mr-2 h-4 w-4" /> Dodaj kontakt
+                  </Button>
+                  <Button onClick={() => setIsImportOpen(true)} data-testid="button-import-empty">
+                    <Upload className="mr-2 h-4 w-4" /> Import CSV
+                  </Button>
+                </div>
               </div>
             ) : (
               <Table>
