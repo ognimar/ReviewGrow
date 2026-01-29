@@ -27,9 +27,14 @@ function ProtectedRoute({ component: Component, requiresGoogle = true }: { compo
   const [location] = useLocation();
   
   const { data: googleStatus, isLoading: googleLoading } = useQuery({
-    queryKey: ['google-status'],
+    queryKey: ['google-status', user?.uid],
     queryFn: async () => {
-      const res = await fetch('/api/google/status', { credentials: 'include' });
+      const { auth } = await import('@/lib/firebase');
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error('Not authenticated');
+      const res = await fetch('/api/google/status', { 
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       return res.json();
     },
     enabled: !!user && requiresGoogle && !isAdmin,
@@ -62,9 +67,14 @@ function OnboardingRoute() {
   const { user, loading, isAdmin } = useAuth();
   
   const { data: googleStatus, isLoading: googleLoading } = useQuery({
-    queryKey: ['google-status'],
+    queryKey: ['google-status', user?.uid],
     queryFn: async () => {
-      const res = await fetch('/api/google/status', { credentials: 'include' });
+      const { auth } = await import('@/lib/firebase');
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error('Not authenticated');
+      const res = await fetch('/api/google/status', { 
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       return res.json();
     },
     enabled: !!user && !isAdmin,

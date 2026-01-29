@@ -1873,7 +1873,7 @@ export async function registerRoutes(
           placeId,
           title,
           businessName: title,
-          address,
+          address: address || 'Address not available',
           reviewLink,
           averageRating,
           connectedAt: new Date().toISOString(),
