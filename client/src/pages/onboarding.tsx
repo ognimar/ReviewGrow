@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { CheckCircle2, Star, MessageSquare, Sparkles, Building2, Loader2 } from 'lucide-react';
+import { auth } from '@/lib/firebase';
 
 interface Account {
   name: string;
@@ -35,12 +36,24 @@ export default function Onboarding() {
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const getAuthHeaders = async () => {
+    const user = auth.currentUser;
+    if (!user) throw new Error('Not authenticated');
+    const token = await user.getIdToken();
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    };
+  };
+
   const { data: googleStatus, refetch: refetchStatus } = useQuery({
     queryKey: ['google-status'],
     queryFn: async () => {
-      const res = await fetch('/api/google/status', { credentials: 'include' });
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/google/status', { headers });
       return res.json();
     },
+    enabled: !!auth.currentUser,
   });
 
   useEffect(() => {
@@ -60,7 +73,8 @@ export default function Onboarding() {
   const handleConnectGoogle = async () => {
     setConnecting(true);
     try {
-      const res = await fetch('/api/auth/google/business', { credentials: 'include' });
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/auth/google/business', { headers });
       const data = await res.json();
       if (data.authUrl) {
         window.location.href = data.authUrl;
@@ -79,7 +93,8 @@ export default function Onboarding() {
 
   const fetchAccounts = async () => {
     try {
-      const res = await fetch('/api/google/accounts', { credentials: 'include' });
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/google/accounts', { headers });
       const data = await res.json();
       if (data.accounts) {
         setAccounts(data.accounts);
@@ -99,8 +114,9 @@ export default function Onboarding() {
 
   const fetchLocations = async (accountName: string) => {
     try {
+      const headers = await getAuthHeaders();
       const encodedAccountName = encodeURIComponent(accountName);
-      const res = await fetch(`/api/google/locations/${encodedAccountName}`, { credentials: 'include' });
+      const res = await fetch(`/api/google/locations/${encodedAccountName}`, { headers });
       const data = await res.json();
       if (data.locations) {
         setLocations(data.locations);
@@ -128,10 +144,10 @@ export default function Onboarding() {
 
     setSaving(true);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch('/api/google/location', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        headers,
         body: JSON.stringify({
           locationName: location.name,
           title: location.title,
