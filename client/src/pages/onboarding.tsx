@@ -57,9 +57,24 @@ export default function Onboarding() {
     }
   }, [googleStatus, setLocation]);
 
-  const handleConnectGoogle = () => {
+  const handleConnectGoogle = async () => {
     setConnecting(true);
-    window.location.href = '/api/auth/google/business?redirect=/onboarding';
+    try {
+      const res = await fetch('/api/auth/google/business', { credentials: 'include' });
+      const data = await res.json();
+      if (data.authUrl) {
+        window.location.href = data.authUrl;
+      } else {
+        throw new Error(data.error || 'Failed to get auth URL');
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Błąd',
+        description: error.message || 'Nie udało się połączyć z Google',
+        variant: 'destructive',
+      });
+      setConnecting(false);
+    }
   };
 
   const fetchAccounts = async () => {
