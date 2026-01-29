@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle2, Star, MessageSquare, Sparkles, Building2, Loader2 } from 'lucide-react';
+import { CheckCircle2, Star, MessageSquare, Sparkles, Building2, Loader2, LogOut } from 'lucide-react';
 import { auth } from '@/lib/firebase';
+import { signOut } from 'firebase/auth';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface Account {
   name: string;
@@ -28,6 +30,7 @@ interface Location {
 export default function Onboarding() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState<'intro' | 'accounts' | 'locations' | 'success'>('intro');
   const [connecting, setConnecting] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
@@ -35,6 +38,16 @@ export default function Onboarding() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      queryClient.clear();
+      setLocation('/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
 
   const getAuthHeaders = async () => {
     const user = auth.currentUser;
@@ -324,6 +337,17 @@ export default function Onboarding() {
                       >
                         Załóż go za darmo →
                       </a>
+                    </div>
+
+                    <div className="text-center pt-4 border-t">
+                      <button
+                        onClick={handleLogout}
+                        className="text-sm text-gray-500 hover:text-gray-700 flex items-center justify-center gap-2 mx-auto"
+                        data-testid="button-logout"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        Wyloguj się lub zmień konto
+                      </button>
                     </div>
                   </>
                 )}
