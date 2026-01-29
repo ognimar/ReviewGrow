@@ -1,6 +1,6 @@
-import { Switch, Route, Redirect } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -15,16 +15,28 @@ import AdminPlans from "@/pages/admin-plans";
 import Templates from "@/pages/templates";
 import Settings from "@/pages/settings";
 import Login from "@/pages/login";
+import Onboarding from "@/pages/onboarding";
 import ReviewLanding from "@/pages/review-landing";
 import ReviewSuccess from "@/pages/review-success";
 import PrivacyPolicy from "@/pages/privacy-policy";
 import Terms from "@/pages/terms";
 import CookiePolicy from "@/pages/cookie-policy";
 
-function ProtectedRoute({ component: Component }: { component: React.ComponentType<any> }) {
-  const { user, loading } = useAuth();
+function ProtectedRoute({ component: Component, requiresGoogle = true }: { component: React.ComponentType<any>; requiresGoogle?: boolean }) {
+  const { user, loading, isAdmin } = useAuth();
+  const [location] = useLocation();
   
-  if (loading) {
+  const { data: googleStatus, isLoading: googleLoading } = useQuery({
+    queryKey: ['google-status'],
+    queryFn: async () => {
+      const res = await fetch('/api/google/status', { credentials: 'include' });
+      return res.json();
+    },
+    enabled: !!user && requiresGoogle && !isAdmin,
+    staleTime: 30000,
+  });
+  
+  if (loading || (requiresGoogle && !isAdmin && googleLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -39,13 +51,55 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     return <Redirect to="/login" />;
   }
   
+  if (requiresGoogle && !isAdmin && googleStatus && !googleStatus.googleConnected) {
+    return <Redirect to="/onboarding" />;
+  }
+  
   return <Component />;
+}
+
+function OnboardingRoute() {
+  const { user, loading, isAdmin } = useAuth();
+  
+  const { data: googleStatus, isLoading: googleLoading } = useQuery({
+    queryKey: ['google-status'],
+    queryFn: async () => {
+      const res = await fetch('/api/google/status', { credentials: 'include' });
+      return res.json();
+    },
+    enabled: !!user && !isAdmin,
+    staleTime: 30000,
+  });
+  
+  if (loading || googleLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (!user) {
+    return <Redirect to="/login" />;
+  }
+  
+  if (isAdmin || googleStatus?.googleConnected) {
+    return <Redirect to="/dashboard" />;
+  }
+  
+  return <Onboarding />;
 }
 
 function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/onboarding">
+        {() => <OnboardingRoute />}
+      </Route>
       <Route path="/r/:slug" component={ReviewLanding} />
       <Route path="/success" component={ReviewSuccess} />
       <Route path="/polityka-prywatnosci" component={PrivacyPolicy} />
@@ -62,19 +116,19 @@ function Router() {
         {() => <ProtectedRoute component={Campaigns} />}
       </Route>
       <Route path="/billing">
-        {() => <ProtectedRoute component={Billing} />}
+        {() => <ProtectedRoute component={Billing} requiresGoogle={false} />}
       </Route>
       <Route path="/admin/users">
-        {() => <ProtectedRoute component={AdminUsers} />}
+        {() => <ProtectedRoute component={AdminUsers} requiresGoogle={false} />}
       </Route>
       <Route path="/admin/plans">
-        {() => <ProtectedRoute component={AdminPlans} />}
+        {() => <ProtectedRoute component={AdminPlans} requiresGoogle={false} />}
       </Route>
       <Route path="/templates">
         {() => <ProtectedRoute component={Templates} />}
       </Route>
       <Route path="/settings">
-        {() => <ProtectedRoute component={Settings} />}
+        {() => <ProtectedRoute component={Settings} requiresGoogle={false} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

@@ -1747,10 +1747,10 @@ export async function registerRoutes(
         },
       });
 
-      res.redirect('/settings?connected=google');
+      res.redirect('/onboarding?connected=google');
     } catch (error) {
       console.error('Google callback error:', error);
-      res.redirect('/?error=auth_failed');
+      res.redirect('/onboarding?error=auth_failed');
     }
   });
 
@@ -1833,19 +1833,54 @@ export async function registerRoutes(
       }
 
       const reviewLink = generateReviewLink(placeId);
+      
+      // Try to fetch average rating from reviews
+      let averageRating = 0;
+      try {
+        const userDoc = await db.collection('users').doc(req.user!.uid).get();
+        const userData = userDoc.data();
+        if (userData?.googleTokens?.accessToken) {
+          let accessToken = userData.googleTokens.accessToken;
+          
+          // Refresh token if expired
+          if (userData.googleTokens.expiresAt < Date.now()) {
+            const newTokens = await refreshAccessToken(userData.googleTokens.refreshToken);
+            accessToken = newTokens.access_token as string;
+          }
+          
+          const reviewsData = await getReviews(accessToken, locationName);
+          if (reviewsData.averageRating) {
+            averageRating = reviewsData.averageRating;
+          } else if (reviewsData.reviews && reviewsData.reviews.length > 0) {
+            const totalRating = reviewsData.reviews.reduce((sum: number, r: any) => {
+              const starRating = r.starRating;
+              const ratingValue = starRating === 'FIVE' ? 5 : starRating === 'FOUR' ? 4 : starRating === 'THREE' ? 3 : starRating === 'TWO' ? 2 : 1;
+              return sum + ratingValue;
+            }, 0);
+            averageRating = Math.round((totalRating / reviewsData.reviews.length) * 10) / 10;
+          }
+        }
+      } catch (reviewError) {
+        console.log('Could not fetch average rating:', reviewError);
+      }
 
       await db.collection('users').doc(req.user!.uid).update({
+        googleConnected: true,
         googleBusiness: {
           locationName,
+          googleLocationId: locationName,
+          googlePlaceId: placeId,
           placeId,
           title,
+          businessName: title,
           address,
           reviewLink,
+          averageRating,
           connectedAt: new Date().toISOString(),
         },
       });
 
-      res.json({ success: true, reviewLink });
+      res.json({ success: true, reviewLink, averageRating });
     } catch (error) {
       console.error('Save location error:', error);
       res.status(500).json({ error: 'Failed to save location' });
@@ -1898,10 +1933,12 @@ export async function registerRoutes(
       const userData = userDoc.data();
 
       const isConnected = !!userData?.googleTokens?.accessToken;
+      const googleConnected = userData?.googleConnected === true;
       const businessInfo = userData?.googleBusiness || null;
 
       res.json({
         connected: isConnected,
+        googleConnected,
         business: businessInfo,
       });
     } catch (error) {
@@ -1919,6 +1956,7 @@ export async function registerRoutes(
       }
 
       await db.collection('users').doc(req.user!.uid).update({
+        googleConnected: false,
         googleTokens: FieldValue.delete(),
         googleBusiness: FieldValue.delete(),
       });

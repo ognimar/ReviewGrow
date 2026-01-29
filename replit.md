@@ -120,6 +120,14 @@ Run `npm run dev` to start the development server on port 5000.
 - **Contact Review Grow** = Official business name (Bartosz Straszewski, NIP: 6472614652) used everywhere in the platform
 
 ## Recent Changes
+- 2026-01-29: Google Business Profile Onboarding Flow
+  - New users must connect Google Business Profile before accessing dashboard
+  - Professional onboarding page at /onboarding with "Dlaczego to jest potrzebne?" section
+  - OAuth flow redirects to onboarding for location selection
+  - Saves googleConnected, googleLocationId, googlePlaceId, businessName, averageRating to user profile
+  - Admin users and billing/settings pages bypass the Google connection requirement
+  - Route guards check googleConnected flag to enforce onboarding
+  - Automatic averageRating calculation from reviews on connection
 - 2026-01-28: Firebase Storage Management System
   - Added storageFiles collection to track uploaded files
   - Files automatically tracked when uploaded (campaign images, follow-up MMS)
