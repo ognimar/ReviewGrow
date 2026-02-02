@@ -706,7 +706,7 @@ export async function registerRoutes(
   // Messaging - Send to all active clients directly
   app.post("/api/messaging/send", authenticate, async (req: AuthRequest, res) => {
     try {
-      const { message, followUpsEnabled } = req.body;
+      const { message, followUpsEnabled, templateId } = req.body;
       
       if (!message) {
         return res.status(400).json({ error: 'Message is required' });
@@ -806,6 +806,20 @@ export async function registerRoutes(
       let sentCount = 0;
       let failedCount = 0;
 
+      // Fetch template if provided (with ownership check)
+      let template: any = null;
+      if (templateId) {
+        const templateDoc = await db.collection('templates').doc(templateId).get();
+        if (!templateDoc.exists) {
+          return res.status(400).json({ error: 'Wybrany szablon nie istnieje' });
+        }
+        const templateData = templateDoc.data();
+        if (templateData?.ownerId !== req.user!.uid) {
+          return res.status(403).json({ error: 'Brak dostępu do tego szablonu' });
+        }
+        template = templateData;
+      }
+
       for (const client of activeClients) {
         try {
           let trackingSlug = client.trackingSlug;
@@ -828,7 +842,45 @@ export async function registerRoutes(
 
           const smsService = getSmsService();
           if (smsService && client.phone) {
-            await smsService.sendSMS(client.phone, personalizedMessage);
+            // Send MMS with personalized image if template is selected
+            if (template && template.imageUrl) {
+              try {
+                const imageBuffer = await personalizeImageFromUrl(
+                  template.imageUrl,
+                  client.name || 'Klient',
+                  {
+                    x: parseInt(template.textX) || 50,
+                    y: parseInt(template.textY) || 100,
+                    fontSize: parseInt(template.fontSize) || 48,
+                    fontColor: template.fontColor || '#ffffff',
+                  },
+                  true // forMMS
+                );
+                
+                const timestamp = Date.now();
+                const storagePath = `campaigns/messaging/${req.user!.uid}/${client.id}_${timestamp}.jpg`;
+                const imageUrl = await uploadToFirebaseStorage(imageBuffer, storagePath);
+                
+                // Track the storage file
+                await trackStorageFile(
+                  req.user!.uid,
+                  storagePath,
+                  imageUrl,
+                  imageBuffer.length,
+                  'messaging',
+                  undefined,
+                  client.id
+                );
+                
+                await sendMMS(client.phone, personalizedMessage, imageUrl);
+                console.log(`[Messaging] Sent MMS with personalized image to ${client.phone}`);
+              } catch (mmsError) {
+                console.error(`[Messaging] MMS failed, falling back to SMS:`, mmsError);
+                await smsService.sendSMS(client.phone, personalizedMessage);
+              }
+            } else {
+              await smsService.sendSMS(client.phone, personalizedMessage);
+            }
             
             await db.collection('clients').doc(client.id).update({
               status: 'SENT',

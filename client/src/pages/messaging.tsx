@@ -3,10 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Sparkles, MessageSquare, Send, Clock, CheckCircle2, Bell, RefreshCw, Loader2, Users } from "lucide-react";
+import { Sparkles, MessageSquare, Send, Clock, CheckCircle2, Bell, RefreshCw, Loader2, Users, Image as ImageIcon, ImagePlus } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchClients } from "@/lib/api";
+import { fetchClients, fetchTemplates } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
@@ -29,6 +29,16 @@ interface UserData {
   followUpSettings?: {
     enabled?: boolean;
   };
+}
+
+interface Template {
+  id: string;
+  name: string;
+  imageUrl: string;
+  textX: number;
+  textY: number;
+  fontSize: number;
+  fontColor: string;
 }
 
 const SMART_MESSAGES = {
@@ -69,11 +79,20 @@ export default function Messaging() {
   const [ownerName, setOwnerName] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [imageEnabled, setImageEnabled] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   const { data: clients = [] } = useQuery<Client[]>({
     queryKey: ['clients'],
     queryFn: fetchClients,
   });
+
+  const { data: templates = [] } = useQuery<Template[]>({
+    queryKey: ['templates'],
+    queryFn: fetchTemplates,
+  });
+
+  const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
 
   const { data: userData } = useQuery<UserData>({
     queryKey: ['user-data'],
@@ -128,7 +147,8 @@ export default function Messaging() {
   };
 
   const hasReviewLink = getCurrentMessage().includes('{{review_link}}');
-  const canSend = activeClients.length > 0 && creditsRemaining >= campaignCost && hasReviewLink;
+  const imageRequiresTemplate = imageEnabled && !selectedTemplateId;
+  const canSend = activeClients.length > 0 && creditsRemaining >= campaignCost && hasReviewLink && !imageRequiresTemplate;
 
   const handleSendCampaign = async () => {
     if (!canSend || !user) return;
@@ -145,6 +165,7 @@ export default function Messaging() {
         body: JSON.stringify({
           message: getCurrentMessage(),
           followUpsEnabled,
+          templateId: imageEnabled ? selectedTemplateId : null,
         }),
       });
       
@@ -368,6 +389,100 @@ export default function Messaging() {
               </Button>
             </div>
 
+            {/* Personalized Image Section */}
+            <div className="bg-white rounded-xl border p-6 space-y-4" data-testid="panel-personalized-image">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-gray-900">Spersonalizowane zdjęcie</h3>
+                  <p className="text-sm text-gray-500">Dodaj zdjęcie z imieniem klienta do wiadomości MMS</p>
+                </div>
+                <Switch 
+                  checked={imageEnabled} 
+                  onCheckedChange={setImageEnabled}
+                  className="data-[state=checked]:bg-emerald-600"
+                  data-testid="switch-personalized-image"
+                />
+              </div>
+              
+              {imageEnabled && (
+                <div className="space-y-4">
+                  {templates.length === 0 ? (
+                    <div className="bg-gray-50 rounded-lg p-6 text-center">
+                      <ImagePlus className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                      <p className="text-gray-600 mb-2">Brak szablonów obrazów</p>
+                      <p className="text-sm text-gray-500 mb-4">Utwórz szablon w sekcji Szablony, aby dodać personalizowane zdjęcia do wiadomości.</p>
+                      <Button 
+                        variant="outline"
+                        onClick={() => window.location.href = '/templates'}
+                        className="border-emerald-600 text-emerald-600 hover:bg-emerald-50"
+                        data-testid="button-go-to-templates"
+                      >
+                        Przejdź do szablonów
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      {selectedTemplate ? (
+                        <div className="relative">
+                          <img 
+                            src={selectedTemplate.imageUrl} 
+                            alt={selectedTemplate.name}
+                            className="w-full h-48 object-cover rounded-lg"
+                          />
+                          <div 
+                            className="absolute text-white font-bold"
+                            style={{
+                              left: `${selectedTemplate.textX}%`,
+                              top: `${selectedTemplate.textY}%`,
+                              fontSize: `${Math.min(selectedTemplate.fontSize / 2, 24)}px`,
+                              color: selectedTemplate.fontColor,
+                              transform: 'translate(-50%, -50%)',
+                              textShadow: '2px 2px 4px rgba(0,0,0,0.5)'
+                            }}
+                          >
+                            Jan
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-gray-100 h-48 rounded-lg flex items-center justify-center">
+                          <p className="text-gray-500">Wybierz szablon obrazu</p>
+                        </div>
+                      )}
+                      
+                      <div>
+                        <Label className="text-sm text-gray-700 mb-2 block">Wybierz szablon</Label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {templates.map((template) => (
+                            <button
+                              key={template.id}
+                              onClick={() => setSelectedTemplateId(template.id)}
+                              className={`relative aspect-video rounded-lg overflow-hidden border-2 transition-all ${
+                                selectedTemplateId === template.id
+                                  ? 'border-emerald-600 ring-2 ring-emerald-200'
+                                  : 'border-gray-200 hover:border-gray-300'
+                              }`}
+                              data-testid={`button-template-select-${template.id}`}
+                            >
+                              <img 
+                                src={template.imageUrl} 
+                                alt={template.name}
+                                className="w-full h-full object-cover"
+                              />
+                              {selectedTemplateId === template.id && (
+                                <div className="absolute inset-0 bg-emerald-600/20 flex items-center justify-center">
+                                  <CheckCircle2 className="w-6 h-6 text-white drop-shadow-lg" />
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Send Campaign Section */}
             <div className="bg-white rounded-xl border p-6" data-testid="panel-send-campaign">
               <div className="flex items-center gap-3 mb-4">
@@ -416,6 +531,11 @@ export default function Messaging() {
               {!hasReviewLink && messageMode === 'custom' && (
                 <p className="text-center text-sm text-red-500 mt-2" data-testid="text-add-review-link">
                   Dodaj tag {'{{review_link}}'} do wiadomości
+                </p>
+              )}
+              {imageRequiresTemplate && (
+                <p className="text-center text-sm text-red-500 mt-2" data-testid="text-select-template">
+                  Wybierz szablon obrazu lub wyłącz opcję zdjęcia
                 </p>
               )}
             </div>
@@ -469,6 +589,32 @@ export default function Messaging() {
                     <div className="bg-gray-100 min-h-[480px] p-4">
                       {/* Time */}
                       <div className="text-center text-xs text-gray-500 mb-4">9:41</div>
+                      
+                      {/* Personalized Image Preview */}
+                      {imageEnabled && selectedTemplate && (
+                        <div className="mb-3">
+                          <div className="relative rounded-xl overflow-hidden shadow-sm">
+                            <img 
+                              src={selectedTemplate.imageUrl} 
+                              alt="Personalized"
+                              className="w-full h-32 object-cover"
+                            />
+                            <div 
+                              className="absolute font-bold"
+                              style={{
+                                left: `${selectedTemplate.textX}%`,
+                                top: `${selectedTemplate.textY}%`,
+                                fontSize: `${Math.min(selectedTemplate.fontSize / 3, 18)}px`,
+                                color: selectedTemplate.fontColor,
+                                transform: 'translate(-50%, -50%)',
+                                textShadow: '2px 2px 4px rgba(0,0,0,0.5)'
+                              }}
+                            >
+                              Jan
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       
                       {/* Message Bubble */}
                       <div className="space-y-2">
