@@ -83,14 +83,19 @@ export async function sendMMS(
   console.log('MMS image URL:', imageUrl);
 
   try {
-    // Create SMIL with image and text embedded (no external text file needed)
-    const smil = `<smil><head><layout><root-layout backgroundColor="#FFFFFF" height="100%" width="100%"/><region id="Image" top="0" left="0" height="80%" width="100%" fit="meet"/><region id="Text" top="80%" left="0" height="20%" width="100%"/></layout></head><body><par dur="10000ms"><img src="${imageUrl}" region="Image"/></par></body></smil>`;
+    // Step 1: Send SMS with the full message text and link
+    const smsResult = await sendSMS(phone, cleanMessage, senderName);
+    if (!smsResult.success) {
+      console.error('SMS part of MMS failed:', smsResult.error);
+    }
+
+    // Step 2: Send MMS with just the image
+    const smil = `<smil><head><layout><root-layout backgroundColor="#FFFFFF" height="100%" width="100%"/><region id="Image" top="0" left="0" height="100%" width="100%" fit="meet"/></layout></head><body><par dur="10000ms"><img src="${imageUrl}" region="Image"/></par></body></smil>`;
 
     const params = new URLSearchParams();
     params.append('to', cleanPhone);
-    params.append('subject', cleanMessage.slice(0, 30));
+    params.append('subject', 'Zdjęcie');
     params.append('smil', smil);
-    params.append('message', cleanMessage);
     params.append('format', 'json');
 
     console.log('SMSAPI MMS request to:', SMSAPI_MMS_URL);
@@ -109,7 +114,8 @@ export async function sendMMS(
 
     if (data.error) {
       console.error('SMSAPI MMS error:', data.error, data.message);
-      return { success: false, error: data.message || data.error };
+      // Even if MMS fails, SMS was sent
+      return smsResult.success ? { success: true, messageId: smsResult.messageId } : { success: false, error: data.message || data.error };
     }
 
     if (data.list && data.list.length > 0) {
