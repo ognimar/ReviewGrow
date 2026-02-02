@@ -8,7 +8,6 @@ import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
 import Clients from "@/pages/clients";
-import Campaigns from "@/pages/campaigns";
 import Messaging from "@/pages/messaging";
 import Billing from "@/pages/billing";
 import AdminUsers from "@/pages/admin-users";
@@ -123,9 +122,6 @@ function Router() {
       </Route>
       <Route path="/clients">
         {() => <ProtectedRoute component={Clients} />}
-      </Route>
-      <Route path="/campaigns">
-        {() => <ProtectedRoute component={Campaigns} />}
       </Route>
       <Route path="/messaging">
         {() => <ProtectedRoute component={Messaging} />}

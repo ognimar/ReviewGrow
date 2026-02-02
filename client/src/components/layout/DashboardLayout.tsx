@@ -23,7 +23,6 @@ const navigation = [
   { name: 'Clients', href: '/clients', icon: Users },
   { name: 'Messaging', href: '/messaging', icon: Send },
   { name: 'Request Scheduling', href: '/request-scheduling', icon: Calendar },
-  { name: 'Campaigns', href: '/campaigns', icon: ImageIcon },
   { name: 'Billing', href: '/billing', icon: CreditCard },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
