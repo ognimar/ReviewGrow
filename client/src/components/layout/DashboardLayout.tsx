@@ -9,7 +9,8 @@ import {
   ShieldCheck,
   Settings,
   LogOut,
-  Menu
+  Menu,
+  Calendar
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -21,6 +22,7 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Clients', href: '/clients', icon: Users },
   { name: 'Messaging', href: '/messaging', icon: Send },
+  { name: 'Request Scheduling', href: '/request-scheduling', icon: Calendar },
   { name: 'Campaigns', href: '/campaigns', icon: ImageIcon },
   { name: 'Billing', href: '/billing', icon: CreditCard },
   { name: 'Settings', href: '/settings', icon: Settings },

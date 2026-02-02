@@ -15,6 +15,7 @@ import AdminUsers from "@/pages/admin-users";
 import AdminPlans from "@/pages/admin-plans";
 import Templates from "@/pages/templates";
 import Settings from "@/pages/settings";
+import RequestScheduling from "@/pages/request-scheduling";
 import Login from "@/pages/login";
 import Onboarding from "@/pages/onboarding";
 import ReviewLanding from "@/pages/review-landing";
@@ -143,6 +144,9 @@ function Router() {
       </Route>
       <Route path="/settings">
         {() => <ProtectedRoute component={Settings} requiresGoogle={false} />}
+      </Route>
+      <Route path="/request-scheduling">
+        {() => <ProtectedRoute component={RequestScheduling} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

@@ -712,6 +712,8 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Message is required' });
       }
       
+      const campaignFollowUpsEnabled = followUpsEnabled ?? true;
+      
       if (!message.includes('{{review_link}}')) {
         return res.status(400).json({ error: 'Message must include {{review_link}} tag' });
       }
@@ -831,6 +833,7 @@ export async function registerRoutes(
             await db.collection('clients').doc(client.id).update({
               status: 'SENT',
               lastSentAt: now.toISOString(),
+              followUpsEnabled: campaignFollowUpsEnabled,
             });
             
             sentCount++;
@@ -2349,6 +2352,28 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Get follow-up settings error:', error);
       res.status(500).json({ error: 'Failed to fetch settings' });
+    }
+  });
+
+  // Simplified follow-up settings (for Request Scheduling page)
+  app.post("/api/settings/follow-up", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const { enabled, followUpCount } = req.body;
+
+      await db.collection('users').doc(req.user!.uid).update({
+        'followUpSettings.enabled': !!enabled,
+        'followUpSettings.followUpCount': Math.max(0, Math.min(5, parseInt(followUpCount) || 2)),
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Update follow-up settings error:', error);
+      res.status(500).json({ error: 'Failed to update settings' });
     }
   });
 

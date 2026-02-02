@@ -65,6 +65,7 @@ export default function Messaging() {
       setCustomMessage(newValue + ' {{review_link}}');
     }
   };
+  const [followUpsEnabled, setFollowUpsEnabled] = useState(true);
   const [ownerName, setOwnerName] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -101,12 +102,14 @@ export default function Messaging() {
     if (userData?.googleBusiness?.title) {
       setBusinessName(userData.googleBusiness.title);
     }
+    if (userData?.followUpSettings?.enabled !== undefined) {
+      setFollowUpsEnabled(userData.followUpSettings.enabled);
+    }
   }, [userData]);
 
   const activeClients = clients.filter(c => c.status !== 'RESPONDED' && c.phone);
   const creditsRemaining = (userData?.subscription?.requestLimit || 0) - (userData?.subscription?.requestsUsed || 0);
   const campaignCost = activeClients.length;
-  const followUpsEnabled = userData?.followUpSettings?.enabled ?? true;
 
   const getCurrentMessage = () => {
     if (messageMode === 'smart') {
@@ -141,6 +144,7 @@ export default function Messaging() {
         },
         body: JSON.stringify({
           message: getCurrentMessage(),
+          followUpsEnabled,
         }),
       });
       
@@ -425,12 +429,12 @@ export default function Messaging() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900">Follow-ups {followUpsEnabled ? 'Włączone' : 'Wyłączone'}</h3>
-                    <p className="text-sm text-gray-500">Zmień w Ustawieniach aby włączyć/wyłączyć przypomnienia</p>
+                    <p className="text-sm text-gray-500">Włącz lub wyłącz automatyczne przypomnienia dla tej kampanii</p>
                   </div>
                 </div>
                 <Switch 
                   checked={followUpsEnabled} 
-                  disabled
+                  onCheckedChange={setFollowUpsEnabled}
                   className="data-[state=checked]:bg-emerald-600"
                   data-testid="switch-followups"
                 />

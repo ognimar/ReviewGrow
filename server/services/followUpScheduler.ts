@@ -13,8 +13,9 @@ interface FollowUpMessage {
 
 interface FollowUpSettings {
   enabled: boolean;
-  messages: FollowUpMessage[];
+  messages?: FollowUpMessage[];
   templateId?: string;
+  followUpCount?: number;
 }
 
 function generateTrackingSlug(): string {
@@ -54,19 +55,19 @@ async function processUserFollowUps(userId: string, userData: any, baseUrl: stri
   }
 
   const settings: FollowUpSettings = userData.followUpSettings;
-  if (!settings?.enabled || !settings.messages?.length) {
+  if (!settings?.enabled) {
     return { sent: 0, failed: 0 };
   }
 
-  const validMessages = settings.messages.filter(m => 
-    m && typeof m.enabled === 'boolean' && 
-    typeof m.daysAfter === 'number' && m.daysAfter > 0 &&
-    typeof m.message === 'string'
-  );
-
-  if (validMessages.length === 0) {
+  // Use new simplified model: followUpCount determines how many follow-ups (3 days apart each)
+  const followUpCount = settings.followUpCount ?? settings.messages?.filter(m => m?.enabled)?.length ?? 2;
+  
+  if (followUpCount <= 0) {
     return { sent: 0, failed: 0 };
   }
+
+  // Default follow-up message template
+  const defaultFollowUpMessage = "Cześć {{name}}, chcieliśmy szybko sprawdzić. Bardzo docenimy Twoją opinię! {{google_link}}";
 
   // Fetch template if configured
   let template: any = null;
@@ -95,6 +96,12 @@ async function processUserFollowUps(userId: string, userData: any, baseUrl: stri
     const clientId = clientDoc.id;
 
     if (!client.lastSentAt || !client.phone) continue;
+    
+    // Check if follow-ups are enabled for this specific client (per-campaign setting)
+    if (client.followUpsEnabled === false) {
+      console.log(`[FollowUp] Skipping ${client.name} - follow-ups disabled for this client`);
+      continue;
+    }
 
     const lastSentDate = new Date(client.lastSentAt).getTime();
     const followUpsSent = client.followUpsSent || 0;
@@ -107,11 +114,15 @@ async function processUserFollowUps(userId: string, userData: any, baseUrl: stri
       continue;
     }
 
-    for (let i = followUpsSent; i < settings.messages.length; i++) {
-      const followUp = settings.messages[i];
-      if (!followUp.enabled || !followUp.message) continue;
-
-      const triggerDate = lastSentDate + (followUp.daysAfter * 24 * 60 * 60 * 1000);
+    // Use followUpCount and 3-day intervals
+    for (let i = followUpsSent; i < followUpCount; i++) {
+      // Each follow-up is sent 3 days after the previous one
+      const daysAfter = (i + 1) * 3;
+      const triggerDate = lastSentDate + (daysAfter * 24 * 60 * 60 * 1000);
+      
+      // Get message from old format or use default
+      const followUp = settings.messages?.[i];
+      const followUpMessage = followUp?.message || defaultFollowUpMessage;
       
       if (now >= triggerDate) {
         // Re-check credit limit before each send (atomic check)
@@ -129,7 +140,7 @@ async function processUserFollowUps(userId: string, userData: any, baseUrl: stri
         }
 
         const trackingLink = `${baseUrl}/r/${trackingSlug}`;
-        let personalizedMessage = followUp.message
+        let personalizedMessage = followUpMessage
           .replace(/\{\{name\}\}/g, client.name || 'Klient')
           .replace(/\{\{google_link\}\}/g, trackingLink);
 
@@ -138,7 +149,7 @@ async function processUserFollowUps(userId: string, userData: any, baseUrl: stri
         let result;
         
         // Check if message contains {{image}} and we have a template
-        if (template && followUp.message.includes('{{image}}')) {
+        if (template && followUpMessage.includes('{{image}}')) {
           try {
             // Generate personalized image
             const imageBuffer = await personalizeImageFromUrl(
