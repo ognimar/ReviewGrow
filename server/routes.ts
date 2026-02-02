@@ -608,9 +608,15 @@ export async function registerRoutes(
           let result;
           if (imageUrl && campaign.message.includes('{{image}}')) {
             // Use MMS for messages with personalized images
-            // Single MMS with text and image together (one message, one source)
             const cleanMessage = personalizedMessage.replace(/\{\{image\}\}/g, '').trim();
-            result = await sendMMS(client.phone, cleanMessage, imageUrl);
+            
+            // Upload text as file for MMS
+            const textBuffer = Buffer.from(cleanMessage, 'utf-8');
+            const textFileName = `campaign_${campaign.name.replace(/\s+/g, '_')}_${client.name?.replace(/\s+/g, '_') || 'client'}_text.txt`;
+            const { url: textUrl, storagePath: textStoragePath, size: textSize } = await uploadToFirebaseStorage(textBuffer, req.user!.uid, textFileName);
+            await trackStorageFile(textStoragePath, textUrl, req.user!.uid, 'campaign', textFileName, textSize, campaignId);
+            
+            result = await sendMMS(client.phone, cleanMessage, imageUrl, textUrl);
             console.log(`Sent MMS to ${client.name}`);
           } else {
             // Use regular SMS (remove {{image}} placeholder if present but no image)
@@ -875,8 +881,14 @@ export async function registerRoutes(
                   client.id
                 );
                 
-                // Send MMS with text and image together (one message, one source)
-                await sendMMS(client.phone, personalizedMessage, result.url);
+                // Upload text as file for MMS
+                const textBuffer = Buffer.from(personalizedMessage, 'utf-8');
+                const textFileName = `${client.id}_${timestamp}.txt`;
+                const textResult = await uploadToFirebaseStorage(textBuffer, req.user!.uid, textFileName);
+                await trackStorageFile(textResult.storagePath, textResult.url, req.user!.uid, 'messaging', textFileName, textResult.size, client.id);
+                
+                // Send MMS with image and text file (text displays below image)
+                await sendMMS(client.phone, personalizedMessage, result.url, textResult.url);
                 console.log(`[Messaging] Sent MMS with personalized image to ${client.phone}`);
               } catch (mmsError) {
                 console.error(`[Messaging] MMS failed, falling back to SMS:`, mmsError);
@@ -912,8 +924,14 @@ export async function registerRoutes(
                   client.id
                 );
                 
-                // Send MMS with text and image together (one message, one source)
-                await sendMMS(client.phone, personalizedMessage, result.url);
+                // Upload text as file for MMS
+                const textBuffer = Buffer.from(personalizedMessage, 'utf-8');
+                const textFileName = `${client.id}_${timestamp}.txt`;
+                const textResult = await uploadToFirebaseStorage(textBuffer, req.user!.uid, textFileName);
+                await trackStorageFile(textResult.storagePath, textResult.url, req.user!.uid, 'messaging', textFileName, textResult.size, client.id);
+                
+                // Send MMS with image and text file (text displays below image)
+                await sendMMS(client.phone, personalizedMessage, result.url, textResult.url);
                 console.log(`[Messaging] Sent MMS with saved image to ${client.phone}`);
               } catch (mmsError) {
                 console.error(`[Messaging] MMS with saved image failed, falling back to SMS:`, mmsError);

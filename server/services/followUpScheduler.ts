@@ -183,9 +183,14 @@ async function processUserFollowUps(userId: string, userData: any, baseUrl: stri
             );
             await trackStorageFile(imgStoragePath, imageUrl, userId, 'followup', imgFileName, imgSize, clientId);
 
-            // Single MMS with text and image together (one message, one source)
+            // Upload text as file for MMS
             const cleanMessage = personalizedMessage.replace(/\{\{image\}\}/g, '').trim();
-            result = await sendMMS(client.phone, cleanMessage, imageUrl);
+            const textBuffer = Buffer.from(cleanMessage, 'utf-8');
+            const txtFileName = `followup_${Date.now()}_${client.name?.replace(/\s+/g, '_') || 'client'}.txt`;
+            const { url: textUrl, storagePath: txtStoragePath, size: txtSize } = await uploadToFirebaseStorage(textBuffer, userId, txtFileName);
+            await trackStorageFile(txtStoragePath, textUrl, userId, 'followup', txtFileName, txtSize, clientId);
+
+            result = await sendMMS(client.phone, cleanMessage, imageUrl, textUrl);
             console.log(`[FollowUp] Sent MMS with personalized image to ${client.name}`);
           } catch (e: any) {
             console.error(`[FollowUp] Failed to generate image for ${client.name}:`, e.message);

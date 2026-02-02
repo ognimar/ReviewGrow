@@ -63,7 +63,8 @@ export async function sendSMS(phone: string, message: string, senderName?: strin
 export async function sendMMS(
   phone: string, 
   message: string, 
-  imageUrl: string
+  imageUrl: string,
+  textUrl?: string
 ): Promise<SendSMSResult> {
   const token = process.env.SMSAPI_TOKEN;
   
@@ -81,19 +82,23 @@ export async function sendMMS(
   
   console.log('MMS message:', cleanMessage);
   console.log('MMS image URL:', imageUrl);
+  console.log('MMS text URL:', textUrl);
 
   try {
-    // Send MMS with image and text together (single message from one source)
-    // Text is in subject (max 30 chars) + message parameter for full text
-    const smil = `<smil><head><layout><root-layout backgroundColor="#FFFFFF" height="100%" width="100%"/><region id="Image" top="0" left="0" height="80%" width="100%" fit="meet"/><region id="Text" top="80%" left="0" height="20%" width="100%"/></layout></head><body><par dur="10000ms"><img src="${imageUrl}" region="Image"/></par></body></smil>`;
+    // Create SMIL with image and text from external URL (text displays below image)
+    let smil: string;
+    if (textUrl) {
+      // Text file provided - display text below image
+      smil = `<smil><head><layout><root-layout backgroundColor="#FFFFFF" height="100%" width="100%"/><region id="Image" top="0" left="0" height="70%" width="100%" fit="meet"/><region id="Text" top="70%" left="0" height="30%" width="100%" fit="scroll"/></layout></head><body><par dur="5000ms"><img src="${imageUrl}" region="Image"/><text src="${textUrl}" region="Text"/></par></body></smil>`;
+    } else {
+      // No text file - just image
+      smil = `<smil><head><layout><root-layout backgroundColor="#FFFFFF" height="100%" width="100%"/><region id="Image" top="0" left="0" height="100%" width="100%" fit="meet"/></layout></head><body><par dur="10000ms"><img src="${imageUrl}" region="Image"/></par></body></smil>`;
+    }
 
     const params = new URLSearchParams();
     params.append('to', cleanPhone);
-    // Subject max 30 chars - use beginning of message
-    const subject = cleanMessage.slice(0, 30);
-    params.append('subject', subject);
+    params.append('subject', 'MMS');
     params.append('smil', smil);
-    params.append('message', cleanMessage);
     params.append('format', 'json');
 
     console.log('SMSAPI MMS request to:', SMSAPI_MMS_URL);
