@@ -608,17 +608,10 @@ export async function registerRoutes(
           let result;
           if (imageUrl && campaign.message.includes('{{image}}')) {
             // Use MMS for messages with personalized images
-            // NEW APPROACH: Send SMS with full text first, then MMS with just image
+            // Single MMS with text and image together (one message, one source)
             const cleanMessage = personalizedMessage.replace(/\{\{image\}\}/g, '').trim();
-            
-            // Step 1: Send SMS with full message and link
-            const smsResult = await sendSMS(client.phone, cleanMessage);
-            if (smsResult.success) {
-              console.log(`Sent SMS to ${client.name}`);
-            }
-            
-            // Step 2: Send MMS with just the image
             result = await sendMMS(client.phone, cleanMessage, imageUrl);
+            console.log(`Sent MMS to ${client.name}`);
           } else {
             // Use regular SMS (remove {{image}} placeholder if present but no image)
             const cleanMessage = personalizedMessage.replace(/\{\{image\}\}/g, '').trim();
@@ -882,10 +875,9 @@ export async function registerRoutes(
                   client.id
                 );
                 
-                // Send SMS first, then MMS with image
-                await sendSMS(client.phone, personalizedMessage);
+                // Send MMS with text and image together (one message, one source)
                 await sendMMS(client.phone, personalizedMessage, result.url);
-                console.log(`[Messaging] Sent SMS+MMS with personalized image to ${client.phone}`);
+                console.log(`[Messaging] Sent MMS with personalized image to ${client.phone}`);
               } catch (mmsError) {
                 console.error(`[Messaging] MMS failed, falling back to SMS:`, mmsError);
                 await sendSMS(client.phone, personalizedMessage);
@@ -920,10 +912,9 @@ export async function registerRoutes(
                   client.id
                 );
                 
-                // Send SMS first, then MMS with image
-                await sendSMS(client.phone, personalizedMessage);
+                // Send MMS with text and image together (one message, one source)
                 await sendMMS(client.phone, personalizedMessage, result.url);
-                console.log(`[Messaging] Sent SMS+MMS with saved image to ${client.phone}`);
+                console.log(`[Messaging] Sent MMS with saved image to ${client.phone}`);
               } catch (mmsError) {
                 console.error(`[Messaging] MMS with saved image failed, falling back to SMS:`, mmsError);
                 await sendSMS(client.phone, personalizedMessage);

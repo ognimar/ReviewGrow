@@ -183,16 +183,8 @@ async function processUserFollowUps(userId: string, userData: any, baseUrl: stri
             );
             await trackStorageFile(imgStoragePath, imageUrl, userId, 'followup', imgFileName, imgSize, clientId);
 
-            // NEW APPROACH: Send SMS with full text first, then MMS with image only
+            // Single MMS with text and image together (one message, one source)
             const cleanMessage = personalizedMessage.replace(/\{\{image\}\}/g, '').trim();
-            
-            // Step 1: Send SMS with full message and link
-            const smsResult = await sendSMS(client.phone, cleanMessage);
-            if (smsResult.success) {
-              console.log(`[FollowUp] Sent SMS with message to ${client.name}`);
-            }
-            
-            // Step 2: Send MMS with image only
             result = await sendMMS(client.phone, cleanMessage, imageUrl);
             console.log(`[FollowUp] Sent MMS with personalized image to ${client.name}`);
           } catch (e: any) {
