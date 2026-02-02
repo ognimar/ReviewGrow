@@ -7,13 +7,7 @@ interface SendSMSResult {
   error?: string;
 }
 
-function convertLinksToSmsapiFormat(message: string): string {
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  return message.replace(urlRegex, (url) => {
-    const cleanUrl = url.replace(/^https?:\/\//, '');
-    return `[%goto:${cleanUrl}%]`;
-  });
-}
+// Links are sent as plain URLs - SMSAPI handles them automatically
 
 export async function sendSMS(phone: string, message: string, senderName: string = 'Info'): Promise<SendSMSResult> {
   const token = process.env.SMSAPI_TOKEN;
@@ -28,23 +22,23 @@ export async function sendSMS(phone: string, message: string, senderName: string
     return { success: false, error: 'Invalid phone number' };
   }
 
-  const formattedMessage = convertLinksToSmsapiFormat(message);
-  console.log('SMS message (original):', message);
-  console.log('SMS message (formatted):', formattedMessage);
+  console.log('SMS message:', message);
 
   try {
-    const params = new URLSearchParams({
-      to: cleanPhone,
-      message: formattedMessage,
-      from: senderName,
-      format: 'json',
-    });
+    const params = new URLSearchParams();
+    params.append('to', cleanPhone);
+    params.append('message', message);
+    params.append('from', senderName);
+    params.append('format', 'json');
+    params.append('encoding', 'utf-8');
 
-    const response = await fetch(`${SMSAPI_SMS_URL}?${params.toString()}`, {
+    const response = await fetch(SMSAPI_SMS_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8',
       },
+      body: params.toString(),
     });
 
     const data = await response.json();
@@ -69,7 +63,6 @@ export async function sendMMS(
   phone: string, 
   message: string, 
   imageUrl: string,
-  textUrl: string,
   senderName: string = 'Info'
 ): Promise<SendSMSResult> {
   const token = process.env.SMSAPI_TOKEN;
@@ -90,24 +83,25 @@ export async function sendMMS(
   console.log('MMS image URL:', imageUrl);
 
   try {
-    // Create SMIL with publicly accessible URLs (SMSAPI fetches them)
-    const smil = `<smil><head><layout><root-layout backgroundColor="#FFFFFF" height="100%" width="100%"/><region id="Image" top="0" left="0" height="70%" width="100%" fit="meet"/><region id="Text" top="70%" left="0" height="30%" width="100%" fit="scroll"/></layout></head><body><par dur="5000ms"><img src="${imageUrl}" region="Image"/><text src="${textUrl}" region="Text"/></par></body></smil>`;
+    // Create SMIL with image and text embedded (no external text file needed)
+    const smil = `<smil><head><layout><root-layout backgroundColor="#FFFFFF" height="100%" width="100%"/><region id="Image" top="0" left="0" height="80%" width="100%" fit="meet"/><region id="Text" top="80%" left="0" height="20%" width="100%"/></layout></head><body><par dur="10000ms"><img src="${imageUrl}" region="Image"/></par></body></smil>`;
 
-    const params = new URLSearchParams({
-      to: cleanPhone,
-      subject: 'MMS',
-      smil: smil,
-      format: 'json',
-    });
+    const params = new URLSearchParams();
+    params.append('to', cleanPhone);
+    params.append('subject', cleanMessage.slice(0, 40));
+    params.append('smil', smil);
+    params.append('message', cleanMessage);
+    params.append('format', 'json');
 
     console.log('SMSAPI MMS request to:', SMSAPI_MMS_URL);
-    console.log('SMSAPI token present:', !!token);
     
-    const response = await fetch(`${SMSAPI_MMS_URL}?${params.toString()}`, {
+    const response = await fetch(SMSAPI_MMS_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8',
       },
+      body: params.toString(),
     });
 
     const data = await response.json();
