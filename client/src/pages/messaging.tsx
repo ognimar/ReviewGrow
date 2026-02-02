@@ -3,10 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Sparkles, MessageSquare, Send, Clock, CheckCircle2, Bell, RefreshCw, Loader2, Users, Image as ImageIcon, ImagePlus } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Sparkles, MessageSquare, Send, Clock, CheckCircle2, Bell, RefreshCw, Loader2, Users, Image as ImageIcon, ImagePlus, Upload, X } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchClients, fetchTemplates } from "@/lib/api";
+import { fetchClients } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
@@ -31,15 +31,6 @@ interface UserData {
   };
 }
 
-interface Template {
-  id: string;
-  name: string;
-  imageUrl: string;
-  textX: number;
-  textY: number;
-  fontSize: number;
-  fontColor: string;
-}
 
 const SMART_MESSAGES = {
   thanks: {
@@ -80,19 +71,34 @@ export default function Messaging() {
   const [businessName, setBusinessName] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [imageEnabled, setImageEnabled] = useState(false);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [uploadedImage, setUploadedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: clients = [] } = useQuery<Client[]>({
     queryKey: ['clients'],
     queryFn: fetchClients,
   });
 
-  const { data: templates = [] } = useQuery<Template[]>({
-    queryKey: ['templates'],
-    queryFn: fetchTemplates,
-  });
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setUploadedImage(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
-  const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
+  const removeImage = () => {
+    setUploadedImage(null);
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const { data: userData } = useQuery<UserData>({
     queryKey: ['user-data'],
@@ -147,8 +153,8 @@ export default function Messaging() {
   };
 
   const hasReviewLink = getCurrentMessage().includes('{{review_link}}');
-  const imageRequiresTemplate = imageEnabled && !selectedTemplateId;
-  const canSend = activeClients.length > 0 && creditsRemaining >= campaignCost && hasReviewLink && !imageRequiresTemplate;
+  const imageRequiresUpload = imageEnabled && !uploadedImage;
+  const canSend = activeClients.length > 0 && creditsRemaining >= campaignCost && hasReviewLink && !imageRequiresUpload;
 
   const handleSendCampaign = async () => {
     if (!canSend || !user) return;
@@ -156,17 +162,20 @@ export default function Messaging() {
     setIsSending(true);
     try {
       const token = await user.getIdToken();
+      
+      const formData = new FormData();
+      formData.append('message', getCurrentMessage());
+      formData.append('followUpsEnabled', String(followUpsEnabled));
+      if (imageEnabled && uploadedImage) {
+        formData.append('image', uploadedImage);
+      }
+      
       const response = await fetch('/api/messaging/send', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          message: getCurrentMessage(),
-          followUpsEnabled,
-          templateId: imageEnabled ? selectedTemplateId : null,
-        }),
+        body: formData,
       });
       
       if (!response.ok) {
@@ -181,6 +190,10 @@ export default function Messaging() {
       });
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       queryClient.invalidateQueries({ queryKey: ['user-data'] });
+      
+      // Clear image after successful send
+      removeImage();
+      setImageEnabled(false);
     } catch (error: any) {
       toast({ 
         title: 'Błąd wysyłania', 
@@ -393,8 +406,8 @@ export default function Messaging() {
             <div className="bg-white rounded-xl border p-6 space-y-4" data-testid="panel-personalized-image">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold text-gray-900">Spersonalizowane zdjęcie</h3>
-                  <p className="text-sm text-gray-500">Dodaj zdjęcie z imieniem klienta do wiadomości MMS</p>
+                  <h3 className="font-semibold text-gray-900">Załącz zdjęcie (MMS)</h3>
+                  <p className="text-sm text-gray-500">Dodaj zdjęcie do wiadomości MMS</p>
                 </div>
                 <Switch 
                   checked={imageEnabled} 
@@ -406,78 +419,52 @@ export default function Messaging() {
               
               {imageEnabled && (
                 <div className="space-y-4">
-                  {templates.length === 0 ? (
-                    <div className="bg-gray-50 rounded-lg p-6 text-center">
-                      <ImagePlus className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                      <p className="text-gray-600 mb-2">Brak szablonów obrazów</p>
-                      <p className="text-sm text-gray-500 mb-4">Utwórz szablon w sekcji Szablony, aby dodać personalizowane zdjęcia do wiadomości.</p>
-                      <Button 
-                        variant="outline"
-                        onClick={() => window.location.href = '/templates'}
-                        className="border-emerald-600 text-emerald-600 hover:bg-emerald-50"
-                        data-testid="button-go-to-templates"
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                    data-testid="input-image-upload"
+                  />
+                  
+                  {imagePreview ? (
+                    <div className="relative">
+                      <img 
+                        src={imagePreview} 
+                        alt="Uploaded image"
+                        className="w-full h-48 object-cover rounded-lg"
+                      />
+                      <button
+                        onClick={removeImage}
+                        className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                        data-testid="button-remove-image"
                       >
-                        Przejdź do szablonów
-                      </Button>
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
                   ) : (
-                    <>
-                      {selectedTemplate ? (
-                        <div className="relative">
-                          <img 
-                            src={selectedTemplate.imageUrl} 
-                            alt={selectedTemplate.name}
-                            className="w-full h-48 object-cover rounded-lg"
-                          />
-                          <div 
-                            className="absolute text-white font-bold"
-                            style={{
-                              left: `${selectedTemplate.textX}%`,
-                              top: `${selectedTemplate.textY}%`,
-                              fontSize: `${Math.min(selectedTemplate.fontSize / 2, 24)}px`,
-                              color: selectedTemplate.fontColor,
-                              transform: 'translate(-50%, -50%)',
-                              textShadow: '2px 2px 4px rgba(0,0,0,0.5)'
-                            }}
-                          >
-                            Jan
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="bg-gray-100 h-48 rounded-lg flex items-center justify-center">
-                          <p className="text-gray-500">Wybierz szablon obrazu</p>
-                        </div>
-                      )}
-                      
-                      <div>
-                        <Label className="text-sm text-gray-700 mb-2 block">Wybierz szablon</Label>
-                        <div className="grid grid-cols-3 gap-2">
-                          {templates.map((template) => (
-                            <button
-                              key={template.id}
-                              onClick={() => setSelectedTemplateId(template.id)}
-                              className={`relative aspect-video rounded-lg overflow-hidden border-2 transition-all ${
-                                selectedTemplateId === template.id
-                                  ? 'border-emerald-600 ring-2 ring-emerald-200'
-                                  : 'border-gray-200 hover:border-gray-300'
-                              }`}
-                              data-testid={`button-template-select-${template.id}`}
-                            >
-                              <img 
-                                src={template.imageUrl} 
-                                alt={template.name}
-                                className="w-full h-full object-cover"
-                              />
-                              {selectedTemplateId === template.id && (
-                                <div className="absolute inset-0 bg-emerald-600/20 flex items-center justify-center">
-                                  <CheckCircle2 className="w-6 h-6 text-white drop-shadow-lg" />
-                                </div>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </>
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full h-48 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center hover:border-emerald-500 hover:bg-emerald-50 transition-all cursor-pointer"
+                      data-testid="button-upload-image"
+                    >
+                      <Upload className="w-10 h-10 text-gray-400 mb-2" />
+                      <p className="text-gray-600 font-medium">Kliknij, aby dodać zdjęcie</p>
+                      <p className="text-sm text-gray-400">lub przeciągnij i upuść</p>
+                    </button>
+                  )}
+                  
+                  {imagePreview && (
+                    <Button 
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full border-emerald-600 text-emerald-600 hover:bg-emerald-50"
+                      data-testid="button-change-image"
+                    >
+                      <ImagePlus className="w-4 h-4 mr-2" />
+                      Zmień zdjęcie
+                    </Button>
                   )}
                 </div>
               )}
@@ -533,9 +520,9 @@ export default function Messaging() {
                   Dodaj tag {'{{review_link}}'} do wiadomości
                 </p>
               )}
-              {imageRequiresTemplate && (
-                <p className="text-center text-sm text-red-500 mt-2" data-testid="text-select-template">
-                  Wybierz szablon obrazu lub wyłącz opcję zdjęcia
+              {imageRequiresUpload && (
+                <p className="text-center text-sm text-red-500 mt-2" data-testid="text-upload-image">
+                  Dodaj zdjęcie lub wyłącz opcję MMS
                 </p>
               )}
             </div>
@@ -590,28 +577,15 @@ export default function Messaging() {
                       {/* Time */}
                       <div className="text-center text-xs text-gray-500 mb-4">9:41</div>
                       
-                      {/* Personalized Image Preview */}
-                      {imageEnabled && selectedTemplate && (
+                      {/* Image Preview in MMS */}
+                      {imageEnabled && imagePreview && (
                         <div className="mb-3">
-                          <div className="relative rounded-xl overflow-hidden shadow-sm">
+                          <div className="rounded-xl overflow-hidden shadow-sm">
                             <img 
-                              src={selectedTemplate.imageUrl} 
-                              alt="Personalized"
+                              src={imagePreview} 
+                              alt="MMS attachment"
                               className="w-full h-32 object-cover"
                             />
-                            <div 
-                              className="absolute font-bold"
-                              style={{
-                                left: `${selectedTemplate.textX}%`,
-                                top: `${selectedTemplate.textY}%`,
-                                fontSize: `${Math.min(selectedTemplate.fontSize / 3, 18)}px`,
-                                color: selectedTemplate.fontColor,
-                                transform: 'translate(-50%, -50%)',
-                                textShadow: '2px 2px 4px rgba(0,0,0,0.5)'
-                              }}
-                            >
-                              Jan
-                            </div>
                           </div>
                         </div>
                       )}
