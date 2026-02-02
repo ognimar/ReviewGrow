@@ -2422,14 +2422,15 @@ export async function registerRoutes(
       // Upload new image if provided
       if (uploadedImage) {
         const timestamp = Date.now();
-        const storagePath = `messaging-templates/${req.user!.uid}/campaign_template_${timestamp}.jpg`;
-        imageUrl = await uploadToFirebaseStorage(uploadedImage.buffer, storagePath);
+        const fileName = `campaign_template_${timestamp}.jpg`;
+        const result = await uploadToFirebaseStorage(uploadedImage.buffer, req.user!.uid, fileName);
+        imageUrl = result.url;
         
         await trackStorageFile(
           req.user!.uid,
-          storagePath,
-          imageUrl,
-          uploadedImage.size,
+          result.storagePath,
+          result.url,
+          result.size,
           'messaging-template'
         );
       }
