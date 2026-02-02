@@ -703,6 +703,163 @@ export async function registerRoutes(
     }
   });
 
+  // Messaging - Send to all active clients directly
+  app.post("/api/messaging/send", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const { message, followUpsEnabled } = req.body;
+      
+      if (!message) {
+        return res.status(400).json({ error: 'Message is required' });
+      }
+      
+      if (!message.includes('{{review_link}}')) {
+        return res.status(400).json({ error: 'Message must include {{review_link}} tag' });
+      }
+
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      // Get active clients (exclude RESPONDED, with phone)
+      const clientsSnapshot = await db.collection('clients')
+        .where('ownerId', '==', req.user!.uid)
+        .get();
+
+      const now = new Date();
+      const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+
+      const activeClients = clientsSnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter((client: any) => {
+          if (!client.phone) return false;
+          if (client.status === 'RESPONDED') return false;
+          if ((client.status === 'SENT' || client.status === 'CLICKED') && client.lastSentAt) {
+            const lastSent = new Date(client.lastSentAt);
+            if (lastSent > threeDaysAgo) return false;
+          }
+          return true;
+        }) as any[];
+
+      const totalRecipients = activeClients.length;
+      if (totalRecipients === 0) {
+        return res.status(400).json({ error: 'No active clients to send to' });
+      }
+
+      // Check subscription and quota
+      const userRef = db.collection('users').doc(req.user!.uid);
+      let userData: any = null;
+
+      if (!req.user?.isAdmin) {
+        try {
+          await db.runTransaction(async (transaction) => {
+            const userDoc = await transaction.get(userRef);
+            userData = userDoc.data();
+            const subscription = userData?.subscription;
+            
+            const allowedStatuses = ['active', 'canceling'];
+            if (!subscription || !allowedStatuses.includes(subscription.status)) {
+              if (subscription?.status === 'past_due') throw new Error('PAYMENT_PAST_DUE');
+              if (subscription?.status === 'unpaid') throw new Error('PAYMENT_UNPAID');
+              if (subscription?.status === 'canceled') throw new Error('SUBSCRIPTION_CANCELED');
+              throw new Error('SUBSCRIPTION_REQUIRED');
+            }
+
+            const expiresAt = new Date(subscription.expiresAt);
+            if (expiresAt < new Date()) {
+              transaction.update(userRef, { 'subscription.status': 'expired' });
+              throw new Error('SUBSCRIPTION_EXPIRED');
+            }
+
+            const requestsUsed = subscription.requestsUsed || 0;
+            const requestLimit = subscription.requestLimit || 0;
+            
+            if (requestsUsed + totalRecipients > requestLimit) {
+              throw new Error(`LIMIT_EXCEEDED:${totalRecipients}:${requestLimit - requestsUsed}`);
+            }
+
+            transaction.update(userRef, {
+              'subscription.requestsUsed': FieldValue.increment(totalRecipients),
+            });
+          });
+        } catch (txError: any) {
+          if (txError.message === 'SUBSCRIPTION_REQUIRED') {
+            return res.status(403).json({ error: 'Aktywna subskrypcja jest wymagana.' });
+          } else if (txError.message === 'SUBSCRIPTION_EXPIRED') {
+            return res.status(403).json({ error: 'Twoja subskrypcja wygasła.' });
+          } else if (txError.message.startsWith('LIMIT_EXCEEDED:')) {
+            const parts = txError.message.split(':');
+            return res.status(403).json({ 
+              error: `Brak wystarczających kredytów. Potrzeba: ${parts[1]}, Dostępne: ${parts[2]}` 
+            });
+          }
+          throw txError;
+        }
+      } else {
+        const userDoc = await userRef.get();
+        userData = userDoc.data();
+      }
+
+      const googleReviewLink = userData?.googleBusiness?.reviewLink || '';
+      let sentCount = 0;
+      let failedCount = 0;
+
+      for (const client of activeClients) {
+        try {
+          let trackingSlug = client.trackingSlug;
+          if (!trackingSlug) {
+            trackingSlug = generateTrackingSlug();
+            await db.collection('clients').doc(client.id).update({ trackingSlug });
+          }
+
+          const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+            ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
+            : 'https://reviewgrow.pl';
+          const trackingLink = `${baseUrl}/r/${trackingSlug}`;
+
+          let personalizedMessage = message
+            .replace(/\{\{name\}\}/g, client.name || '')
+            .replace(/\{\{first_name\}\}/g, (client.name || '').split(' ')[0])
+            .replace(/\{\{business_name\}\}/g, userData?.googleBusiness?.title || '')
+            .replace(/\{\{review_link\}\}/g, trackingLink)
+            .replace(/\{\{google_link\}\}/g, trackingLink);
+
+          const smsService = getSmsService();
+          if (smsService && client.phone) {
+            await smsService.sendSMS(client.phone, personalizedMessage);
+            
+            await db.collection('clients').doc(client.id).update({
+              status: 'SENT',
+              lastSentAt: now.toISOString(),
+            });
+            
+            sentCount++;
+          }
+        } catch (error) {
+          console.error(`Failed to send to ${client.phone}:`, error);
+          failedCount++;
+        }
+      }
+
+      // Update SMS usage counter
+      if (sentCount > 0) {
+        await userRef.update({
+          smsUsed: FieldValue.increment(sentCount),
+        });
+      }
+
+      
+      res.json({ 
+        success: true, 
+        sentCount, 
+        failedCount,
+      });
+    } catch (error) {
+      console.error('Messaging send error:', error);
+      res.status(500).json({ error: 'Failed to send messages' });
+    }
+  });
+
   // Get Single Campaign
   app.get("/api/campaigns/:id", authenticate, async (req: AuthRequest, res) => {
     try {

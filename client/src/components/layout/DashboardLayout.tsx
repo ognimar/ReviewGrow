@@ -20,8 +20,8 @@ import { fetchStats } from "@/lib/api";
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Clients', href: '/clients', icon: Users },
-  { name: 'Campaigns', href: '/campaigns', icon: Send },
-  { name: 'Templates', href: '/templates', icon: ImageIcon },
+  { name: 'Messaging', href: '/messaging', icon: Send },
+  { name: 'Campaigns', href: '/campaigns', icon: ImageIcon },
   { name: 'Billing', href: '/billing', icon: CreditCard },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
