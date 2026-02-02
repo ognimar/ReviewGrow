@@ -248,7 +248,7 @@ export default function Messaging() {
   };
 
   const hasReviewLink = getCurrentMessage().includes('{{review_link}}');
-  const imageRequiresUpload = imageEnabled && !uploadedImage;
+  const imageRequiresUpload = imageEnabled && !uploadedImage && !imagePreview;
   const canSend = activeClients.length > 0 && creditsRemaining >= campaignCost && hasReviewLink && !imageRequiresUpload;
 
   const handleSendCampaign = async () => {
@@ -791,7 +791,7 @@ export default function Messaging() {
                             {getPreviewMessage()}
                             {hasReviewLink && (
                               <span className="text-emerald-200 underline block mt-1">
-                                reviewharvest.pl/u/test-link
+                                crg.pl/r/{businessName ? businessName.toLowerCase().replace(/\s+/g, '-').slice(0, 15) : 'twoja-firma'}
                               </span>
                             )}
                           </p>
@@ -805,7 +805,7 @@ export default function Messaging() {
                           <div className="bg-emerald-600 text-white rounded-2xl rounded-bl-md p-4 max-w-[90%] shadow-sm opacity-70">
                             <p className="text-sm leading-relaxed">
                               Hej Jan, chcieliśmy szybko sprawdzić. Bardzo docenimy Twoją opinię!{' '}
-                              <span className="text-emerald-200 underline">reviewharvest.pl/u/test-link</span>
+                              <span className="text-emerald-200 underline">crg.pl/r/{businessName ? businessName.toLowerCase().replace(/\s+/g, '-').slice(0, 15) : 'twoja-firma'}</span>
                             </p>
                           </div>
                           <div className="text-xs text-gray-400 ml-2">2:30 PM</div>
