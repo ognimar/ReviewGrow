@@ -836,8 +836,7 @@ export async function registerRoutes(
             .replace(/\{\{review_link\}\}/g, trackingLink)
             .replace(/\{\{google_link\}\}/g, trackingLink);
 
-          const smsService = getSmsService();
-          if (smsService && client.phone) {
+          if (client.phone) {
             // Send MMS with personalized image or regular SMS
             if (imageBuffer && imageSettings) {
               try {
@@ -857,28 +856,28 @@ export async function registerRoutes(
                 
                 // Upload personalized image
                 const timestamp = Date.now();
-                const storagePath = `campaigns/messaging/${req.user!.uid}/${client.id}_${timestamp}.jpg`;
-                const personalizedImageUrl = await uploadToFirebaseStorage(personalizedImageBuffer, storagePath);
+                const fileName = `${client.id}_${timestamp}.jpg`;
+                const result = await uploadToFirebaseStorage(personalizedImageBuffer, req.user!.uid, fileName);
                 
                 // Track the storage file
                 await trackStorageFile(
                   req.user!.uid,
-                  storagePath,
-                  personalizedImageUrl,
-                  personalizedImageBuffer.length,
+                  result.storagePath,
+                  result.url,
+                  result.size,
                   'messaging',
                   undefined,
                   client.id
                 );
                 
-                await sendMMS(client.phone, personalizedMessage, personalizedImageUrl);
+                await sendMMS(client.phone, personalizedMessage, result.url);
                 console.log(`[Messaging] Sent MMS with personalized image to ${client.phone}`);
               } catch (mmsError) {
                 console.error(`[Messaging] MMS failed, falling back to SMS:`, mmsError);
-                await smsService.sendSMS(client.phone, personalizedMessage);
+                await sendSMS(client.phone, personalizedMessage);
               }
             } else {
-              await smsService.sendSMS(client.phone, personalizedMessage);
+              await sendSMS(client.phone, personalizedMessage);
             }
             
             await db.collection('clients').doc(client.id).update({
