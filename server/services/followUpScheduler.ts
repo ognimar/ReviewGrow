@@ -192,8 +192,8 @@ async function processUserFollowUps(userId: string, userData: any, baseUrl: stri
               console.log(`[FollowUp] Sent SMS with message to ${client.name}`);
             }
             
-            // Step 2: Send MMS with image only (no text file needed)
-            result = await sendMMS(client.phone, cleanMessage, imageUrl, undefined);
+            // Step 2: Send MMS with image only
+            result = await sendMMS(client.phone, cleanMessage, imageUrl);
             console.log(`[FollowUp] Sent MMS with personalized image to ${client.name}`);
           } catch (e: any) {
             console.error(`[FollowUp] Failed to generate image for ${client.name}:`, e.message);

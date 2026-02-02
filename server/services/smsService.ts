@@ -9,7 +9,7 @@ interface SendSMSResult {
 
 // Links are sent as plain URLs - SMSAPI handles them automatically
 
-export async function sendSMS(phone: string, message: string, senderName: string = 'Info'): Promise<SendSMSResult> {
+export async function sendSMS(phone: string, message: string, senderName?: string): Promise<SendSMSResult> {
   const token = process.env.SMSAPI_TOKEN;
   
   if (!token) {
@@ -28,7 +28,8 @@ export async function sendSMS(phone: string, message: string, senderName: string
     const params = new URLSearchParams();
     params.append('to', cleanPhone);
     params.append('message', message);
-    params.append('from', senderName);
+    // Don't set 'from' - let SMSAPI use default number (same as MMS)
+    // This ensures both SMS and MMS come from the same phone number
     params.append('format', 'json');
     params.append('encoding', 'utf-8');
 
@@ -62,8 +63,7 @@ export async function sendSMS(phone: string, message: string, senderName: string
 export async function sendMMS(
   phone: string, 
   message: string, 
-  imageUrl: string,
-  senderName: string = 'Info'
+  imageUrl: string
 ): Promise<SendSMSResult> {
   const token = process.env.SMSAPI_TOKEN;
   
@@ -77,19 +77,10 @@ export async function sendMMS(
     return { success: false, error: 'Invalid phone number' };
   }
 
-  const cleanMessage = message.replace(/\{\{image\}\}/g, '').trim();
-  
-  console.log('MMS message:', cleanMessage);
   console.log('MMS image URL:', imageUrl);
 
   try {
-    // Step 1: Send SMS with the full message text and link
-    const smsResult = await sendSMS(phone, cleanMessage, senderName);
-    if (!smsResult.success) {
-      console.error('SMS part of MMS failed:', smsResult.error);
-    }
-
-    // Step 2: Send MMS with just the image
+    // Send MMS with just the image (SMS is sent separately before this call)
     const smil = `<smil><head><layout><root-layout backgroundColor="#FFFFFF" height="100%" width="100%"/><region id="Image" top="0" left="0" height="100%" width="100%" fit="meet"/></layout></head><body><par dur="10000ms"><img src="${imageUrl}" region="Image"/></par></body></smil>`;
 
     const params = new URLSearchParams();
@@ -114,8 +105,7 @@ export async function sendMMS(
 
     if (data.error) {
       console.error('SMSAPI MMS error:', data.error, data.message);
-      // Even if MMS fails, SMS was sent
-      return smsResult.success ? { success: true, messageId: smsResult.messageId } : { success: false, error: data.message || data.error };
+      return { success: false, error: data.message || data.error };
     }
 
     if (data.list && data.list.length > 0) {
@@ -131,15 +121,14 @@ export async function sendMMS(
 }
 
 export async function sendBulkSMS(
-  recipients: Array<{ phone: string; message: string }>,
-  senderName: string = 'Info'
+  recipients: Array<{ phone: string; message: string }>
 ): Promise<{ sent: number; failed: number; errors: string[] }> {
   let sent = 0;
   let failed = 0;
   const errors: string[] = [];
 
   for (const recipient of recipients) {
-    const result = await sendSMS(recipient.phone, recipient.message, senderName);
+    const result = await sendSMS(recipient.phone, recipient.message);
     if (result.success) {
       sent++;
     } else {

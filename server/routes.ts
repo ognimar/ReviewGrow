@@ -608,17 +608,17 @@ export async function registerRoutes(
           let result;
           if (imageUrl && campaign.message.includes('{{image}}')) {
             // Use MMS for messages with personalized images
-            // Upload text message as file for SMIL
+            // NEW APPROACH: Send SMS with full text first, then MMS with just image
             const cleanMessage = personalizedMessage.replace(/\{\{image\}\}/g, '').trim();
-            const textBuffer = Buffer.from(cleanMessage, 'utf-8');
-            const textFileName = `campaign_${campaign.name.replace(/\s+/g, '_')}_${client.name?.replace(/\s+/g, '_') || 'client'}.txt`;
-            const { url: textUrl, storagePath: textStoragePath, size: textSize } = await uploadToFirebaseStorage(
-              textBuffer,
-              req.user!.uid,
-              textFileName
-            );
-            await trackStorageFile(textStoragePath, textUrl, req.user!.uid, 'campaign', textFileName, textSize, campaignId);
-            result = await sendMMS(client.phone, personalizedMessage, imageUrl, textUrl);
+            
+            // Step 1: Send SMS with full message and link
+            const smsResult = await sendSMS(client.phone, cleanMessage);
+            if (smsResult.success) {
+              console.log(`Sent SMS to ${client.name}`);
+            }
+            
+            // Step 2: Send MMS with just the image
+            result = await sendMMS(client.phone, cleanMessage, imageUrl);
           } else {
             // Use regular SMS (remove {{image}} placeholder if present but no image)
             const cleanMessage = personalizedMessage.replace(/\{\{image\}\}/g, '').trim();
