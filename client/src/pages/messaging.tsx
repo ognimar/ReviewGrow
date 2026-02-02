@@ -290,9 +290,7 @@ export default function Messaging() {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       queryClient.invalidateQueries({ queryKey: ['user-data'] });
       
-      // Clear image after successful send
-      removeImage();
-      setImageEnabled(false);
+      // Keep image for follow-ups - don't delete it after sending
     } catch (error: any) {
       toast({ 
         title: 'Błąd wysyłania', 

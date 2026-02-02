@@ -69,9 +69,19 @@ async function processUserFollowUps(userId: string, userData: any, baseUrl: stri
   // Default follow-up message template
   const defaultFollowUpMessage = "Cześć {{name}}, chcieliśmy szybko sprawdzić. Bardzo docenimy Twoją opinię! {{google_link}}";
 
-  // Fetch template if configured
+  // Use messagingImage settings for follow-ups (saved from Messaging page)
   let template: any = null;
-  if (settings.templateId) {
+  if (userData.messagingImage?.enabled && userData.messagingImage?.imageUrl) {
+    template = {
+      imageUrl: userData.messagingImage.imageUrl,
+      textX: userData.messagingImage.textX || 50,
+      textY: userData.messagingImage.textY || 50,
+      fontSize: userData.messagingImage.fontSize || 48,
+      fontColor: userData.messagingImage.fontColor || '#ffffff',
+    };
+    console.log(`[FollowUp] Using saved messaging image for follow-ups: ${template.imageUrl}`);
+  } else if (settings.templateId) {
+    // Fallback to old template system
     const templateDoc = await db.collection('templates').doc(settings.templateId).get();
     if (templateDoc.exists) {
       template = templateDoc.data();
@@ -173,18 +183,17 @@ async function processUserFollowUps(userId: string, userData: any, baseUrl: stri
             );
             await trackStorageFile(imgStoragePath, imageUrl, userId, 'followup', imgFileName, imgSize, clientId);
 
-            // Send MMS with image - upload text as file for SMIL
+            // NEW APPROACH: Send SMS with full text first, then MMS with image only
             const cleanMessage = personalizedMessage.replace(/\{\{image\}\}/g, '').trim();
-            const textBuffer = Buffer.from(cleanMessage, 'utf-8');
-            const txtFileName = `followup_${Date.now()}_${client.name?.replace(/\s+/g, '_') || 'client'}.txt`;
-            const { url: textUrl, storagePath: txtStoragePath, size: txtSize } = await uploadToFirebaseStorage(
-              textBuffer,
-              userId,
-              txtFileName
-            );
-            await trackStorageFile(txtStoragePath, textUrl, userId, 'followup', txtFileName, txtSize, clientId);
             
-            result = await sendMMS(client.phone, cleanMessage, imageUrl, textUrl);
+            // Step 1: Send SMS with full message and link
+            const smsResult = await sendSMS(client.phone, cleanMessage);
+            if (smsResult.success) {
+              console.log(`[FollowUp] Sent SMS with message to ${client.name}`);
+            }
+            
+            // Step 2: Send MMS with image only (no text file needed)
+            result = await sendMMS(client.phone, cleanMessage, imageUrl, undefined);
             console.log(`[FollowUp] Sent MMS with personalized image to ${client.name}`);
           } catch (e: any) {
             console.error(`[FollowUp] Failed to generate image for ${client.name}:`, e.message);
