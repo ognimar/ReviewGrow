@@ -29,6 +29,14 @@ interface UserData {
   followUpSettings?: {
     enabled?: boolean;
   };
+  messagingImage?: {
+    enabled?: boolean;
+    imageUrl?: string;
+    textX?: number;
+    textY?: number;
+    fontSize?: number;
+    fontColor?: string;
+  };
 }
 
 
@@ -84,7 +92,44 @@ export default function Messaging() {
     queryFn: fetchClients,
   });
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [isSavingImage, setIsSavingImage] = useState(false);
+
+  const saveImageToServer = async (file: File) => {
+    if (!user) return;
+    setIsSavingImage(true);
+    try {
+      const token = await user.getIdToken();
+      const formData = new FormData();
+      formData.append('image', file);
+      formData.append('textX', String(textX));
+      formData.append('textY', String(textY));
+      formData.append('fontSize', String(fontSize));
+      formData.append('fontColor', fontColor);
+      formData.append('imageEnabled', 'true');
+      
+      const response = await fetch('/api/settings/messaging-image', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.imageUrl) {
+          setImagePreview(data.imageUrl);
+        }
+        queryClient.invalidateQueries({ queryKey: ['user-data'] });
+        toast({ title: 'Zdjęcie zapisane', description: 'Zdjęcie zostało zapisane w kampanii' });
+      }
+    } catch (error) {
+      console.error('Failed to save image:', error);
+      toast({ title: 'Błąd', description: 'Nie udało się zapisać zdjęcia', variant: 'destructive' });
+    } finally {
+      setIsSavingImage(false);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setUploadedImage(file);
@@ -93,14 +138,50 @@ export default function Messaging() {
         setImagePreview(reader.result as string);
       };
       reader.readAsDataURL(file);
+      
+      // Save to server
+      await saveImageToServer(file);
     }
   };
 
-  const removeImage = () => {
+  const removeImage = async () => {
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      await fetch('/api/settings/messaging-image', {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      queryClient.invalidateQueries({ queryKey: ['user-data'] });
+    } catch (error) {
+      console.error('Failed to delete image:', error);
+    }
     setUploadedImage(null);
     setImagePreview(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  };
+
+  const saveImageSettings = async (newTextX?: number, newTextY?: number, newFontSize?: number, newFontColor?: string) => {
+    if (!user || !imagePreview) return;
+    try {
+      const token = await user.getIdToken();
+      const formData = new FormData();
+      formData.append('textX', String(newTextX ?? textX));
+      formData.append('textY', String(newTextY ?? textY));
+      formData.append('fontSize', String(newFontSize ?? fontSize));
+      formData.append('fontColor', newFontColor ?? fontColor);
+      formData.append('imageEnabled', String(imageEnabled));
+      formData.append('existingImageUrl', imagePreview);
+      
+      await fetch('/api/settings/messaging-image', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+      });
+    } catch (error) {
+      console.error('Failed to save image settings:', error);
     }
   };
 
@@ -133,6 +214,16 @@ export default function Messaging() {
     }
     if (userData?.followUpSettings?.enabled !== undefined) {
       setFollowUpsEnabled(userData.followUpSettings.enabled);
+    }
+    // Load saved messaging image settings
+    if (userData?.messagingImage) {
+      const img = userData.messagingImage;
+      if (img.enabled !== undefined) setImageEnabled(img.enabled);
+      if (img.imageUrl) setImagePreview(img.imageUrl);
+      if (img.textX !== undefined) setTextX(img.textX);
+      if (img.textY !== undefined) setTextY(img.textY);
+      if (img.fontSize !== undefined) setFontSize(img.fontSize);
+      if (img.fontColor) setFontColor(img.fontColor);
     }
   }, [userData]);
 
@@ -489,6 +580,8 @@ export default function Messaging() {
                             max="100"
                             value={textX}
                             onChange={(e) => setTextX(Number(e.target.value))}
+                            onMouseUp={(e) => saveImageSettings(Number((e.target as HTMLInputElement).value), undefined, undefined, undefined)}
+                            onTouchEnd={(e) => saveImageSettings(Number((e.target as HTMLInputElement).value), undefined, undefined, undefined)}
                             className="w-full accent-emerald-600"
                             data-testid="slider-text-x"
                           />
@@ -501,6 +594,8 @@ export default function Messaging() {
                             max="100"
                             value={textY}
                             onChange={(e) => setTextY(Number(e.target.value))}
+                            onMouseUp={(e) => saveImageSettings(undefined, Number((e.target as HTMLInputElement).value), undefined, undefined)}
+                            onTouchEnd={(e) => saveImageSettings(undefined, Number((e.target as HTMLInputElement).value), undefined, undefined)}
                             className="w-full accent-emerald-600"
                             data-testid="slider-text-y"
                           />
@@ -516,6 +611,8 @@ export default function Messaging() {
                             max="120"
                             value={fontSize}
                             onChange={(e) => setFontSize(Number(e.target.value))}
+                            onMouseUp={(e) => saveImageSettings(undefined, undefined, Number((e.target as HTMLInputElement).value), undefined)}
+                            onTouchEnd={(e) => saveImageSettings(undefined, undefined, Number((e.target as HTMLInputElement).value), undefined)}
                             className="w-full accent-emerald-600"
                             data-testid="slider-font-size"
                           />
@@ -526,7 +623,10 @@ export default function Messaging() {
                             {['#ffffff', '#000000', '#ffff00', '#00ff00'].map((color) => (
                               <button
                                 key={color}
-                                onClick={() => setFontColor(color)}
+                                onClick={() => {
+                                  setFontColor(color);
+                                  saveImageSettings(undefined, undefined, undefined, color);
+                                }}
                                 className={`w-8 h-8 rounded-full border-2 ${fontColor === color ? 'ring-2 ring-emerald-500 ring-offset-2' : 'border-gray-300'}`}
                                 style={{ backgroundColor: color }}
                                 data-testid={`button-color-${color.replace('#', '')}`}

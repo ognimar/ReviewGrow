@@ -2406,6 +2406,79 @@ export async function registerRoutes(
     }
   });
 
+  // Save messaging image settings
+  app.post("/api/settings/messaging-image", authenticate, upload.single('image'), async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const { textX, textY, fontSize, fontColor, imageEnabled } = req.body;
+      const uploadedImage = req.file;
+
+      let imageUrl = req.body.existingImageUrl || null;
+
+      // Upload new image if provided
+      if (uploadedImage) {
+        const timestamp = Date.now();
+        const storagePath = `messaging-templates/${req.user!.uid}/campaign_template_${timestamp}.jpg`;
+        imageUrl = await uploadToFirebaseStorage(uploadedImage.buffer, storagePath);
+        
+        await trackStorageFile(
+          req.user!.uid,
+          storagePath,
+          imageUrl,
+          uploadedImage.size,
+          'messaging-template'
+        );
+      }
+
+      await db.collection('users').doc(req.user!.uid).update({
+        'messagingImage': {
+          enabled: imageEnabled === 'true' || imageEnabled === true,
+          imageUrl: imageUrl,
+          textX: parseInt(textX) || 50,
+          textY: parseInt(textY) || 50,
+          fontSize: parseInt(fontSize) || 48,
+          fontColor: fontColor || '#ffffff',
+          updatedAt: new Date().toISOString(),
+        }
+      });
+
+      res.json({ success: true, imageUrl });
+    } catch (error) {
+      console.error('Save messaging image error:', error);
+      res.status(500).json({ error: 'Failed to save messaging image' });
+    }
+  });
+
+  // Delete messaging image
+  app.delete("/api/settings/messaging-image", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const db = getFirestore();
+      if (!db) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      await db.collection('users').doc(req.user!.uid).update({
+        'messagingImage': {
+          enabled: false,
+          imageUrl: null,
+          textX: 50,
+          textY: 50,
+          fontSize: 48,
+          fontColor: '#ffffff',
+        }
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Delete messaging image error:', error);
+      res.status(500).json({ error: 'Failed to delete messaging image' });
+    }
+  });
+
   // Simplified follow-up settings (for Request Scheduling page)
   app.post("/api/settings/follow-up", authenticate, async (req: AuthRequest, res) => {
     try {
