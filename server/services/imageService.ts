@@ -307,6 +307,69 @@ function escapeXml(text: string): string {
     .replace(/'/g, '&apos;');
 }
 
+export async function personalizeImageFromBuffer(
+  imageBuffer: Buffer,
+  text: string,
+  settings: { x: number; y: number; fontSize: number; fontColor: string },
+  forMMS: boolean = false
+): Promise<Buffer> {
+  const { x, y, fontSize, fontColor } = settings;
+  
+  // Get image metadata to properly position text
+  const metadata = await sharp(imageBuffer).metadata();
+  let width = metadata.width || 800;
+  let height = metadata.height || 600;
+  
+  // For MMS, resize to max 480x360 to keep file size under 100KB
+  let resizedBuffer = imageBuffer;
+  let scale = 1;
+  if (forMMS) {
+    const maxWidth = 480;
+    const maxHeight = 360;
+    if (width > maxWidth || height > maxHeight) {
+      scale = Math.min(maxWidth / width, maxHeight / height);
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+      resizedBuffer = await sharp(imageBuffer)
+        .resize(width, height)
+        .toBuffer();
+    }
+  }
+  
+  // Scale font size proportionally for MMS
+  const scaledFontSize = forMMS ? Math.round(fontSize * scale) : fontSize;
+  
+  // Create SVG with text overlay - x and y are percentages
+  const textX = Math.round((x / 100) * width);
+  const textY = Math.round((y / 100) * height);
+  
+  const svgText = `
+    <svg width="${width}" height="${height}">
+      <text x="${textX}" y="${textY}" font-family="Arial, sans-serif" font-size="${scaledFontSize}" fill="${fontColor}" font-weight="bold">
+        ${escapeXml(text)}
+      </text>
+    </svg>
+  `;
+
+  const textBuffer = Buffer.from(svgText);
+  
+  // For MMS use lower quality to meet file size limits (<100KB)
+  const quality = forMMS ? 50 : 85;
+  
+  const result = await sharp(resizedBuffer)
+    .composite([
+      {
+        input: textBuffer,
+        top: 0,
+        left: 0,
+      }
+    ])
+    .jpeg({ quality, progressive: true })
+    .toBuffer();
+
+  return result;
+}
+
 export async function uploadToFirebaseStorage(
   buffer: Buffer,
   userId: string,

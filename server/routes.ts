@@ -10,7 +10,7 @@ import { generatePersonalizedImages } from "./services/imageService";
 import { sendSMS, sendMMS } from "./services/smsService";
 import { generateAuthUrl, exchangeCodeForTokens, getAccounts, getLocations, getReviews, generateReviewLink, refreshAccessToken, replyToReview } from "./services/googleBusinessService";
 import { generateAIReply } from "./services/aiReplyService";
-import { personalizeImageFromUrl, uploadToFirebaseStorage, deleteFromFirebaseStorage, extractStoragePathFromUrl, trackStorageFile, getStorageFilesByOwner, deleteStorageFileById, deleteStorageFilesByOwner } from "./services/imageService";
+import { personalizeImageFromUrl, personalizeImageFromBuffer, uploadToFirebaseStorage, deleteFromFirebaseStorage, extractStoragePathFromUrl, trackStorageFile, getStorageFilesByOwner, deleteStorageFileById, deleteStorageFilesByOwner } from "./services/imageService";
 import { sendPersonalizedEmail, sendBulkEmails, isEmailConfigured } from "./services/emailService";
 import { runEmailFollowUpNow } from "./services/emailFollowUpScheduler";
 import Stripe from "stripe";
@@ -706,7 +706,7 @@ export async function registerRoutes(
   // Messaging - Send to all active clients directly
   app.post("/api/messaging/send", authenticate, upload.single('image'), async (req: AuthRequest, res) => {
     try {
-      const { message, followUpsEnabled } = req.body;
+      const { message, followUpsEnabled, textX, textY, fontSize, fontColor } = req.body;
       const uploadedImage = req.file;
       
       if (!message) {
@@ -807,28 +807,14 @@ export async function registerRoutes(
       let sentCount = 0;
       let failedCount = 0;
 
-      // Upload image to Firebase Storage if provided
-      let mmsImageUrl: string | null = null;
-      if (uploadedImage) {
-        try {
-          const timestamp = Date.now();
-          const storagePath = `campaigns/messaging/${req.user!.uid}/campaign_image_${timestamp}.jpg`;
-          mmsImageUrl = await uploadToFirebaseStorage(uploadedImage.buffer, storagePath);
-          
-          // Track the storage file
-          await trackStorageFile(
-            req.user!.uid,
-            storagePath,
-            mmsImageUrl,
-            uploadedImage.size,
-            'messaging'
-          );
-          console.log(`[Messaging] Uploaded campaign image: ${mmsImageUrl}`);
-        } catch (uploadError) {
-          console.error('[Messaging] Failed to upload image:', uploadError);
-          return res.status(500).json({ error: 'Nie udało się przesłać zdjęcia' });
-        }
-      }
+      // Store uploaded image buffer for personalization
+      const imageBuffer = uploadedImage?.buffer || null;
+      const imageSettings = uploadedImage ? {
+        textX: parseInt(textX) || 50,
+        textY: parseInt(textY) || 50,
+        fontSize: parseInt(fontSize) || 48,
+        fontColor: fontColor || '#ffffff'
+      } : null;
 
       for (const client of activeClients) {
         try {
@@ -852,11 +838,41 @@ export async function registerRoutes(
 
           const smsService = getSmsService();
           if (smsService && client.phone) {
-            // Send MMS with uploaded image or regular SMS
-            if (mmsImageUrl) {
+            // Send MMS with personalized image or regular SMS
+            if (imageBuffer && imageSettings) {
               try {
-                await sendMMS(client.phone, personalizedMessage, mmsImageUrl);
-                console.log(`[Messaging] Sent MMS with image to ${client.phone}`);
+                // Generate personalized image with client's name
+                const clientFirstName = (client.name || 'Klient').split(' ')[0];
+                const personalizedImageBuffer = await personalizeImageFromBuffer(
+                  imageBuffer,
+                  clientFirstName,
+                  {
+                    x: imageSettings.textX,
+                    y: imageSettings.textY,
+                    fontSize: imageSettings.fontSize,
+                    fontColor: imageSettings.fontColor,
+                  },
+                  true // forMMS
+                );
+                
+                // Upload personalized image
+                const timestamp = Date.now();
+                const storagePath = `campaigns/messaging/${req.user!.uid}/${client.id}_${timestamp}.jpg`;
+                const personalizedImageUrl = await uploadToFirebaseStorage(personalizedImageBuffer, storagePath);
+                
+                // Track the storage file
+                await trackStorageFile(
+                  req.user!.uid,
+                  storagePath,
+                  personalizedImageUrl,
+                  personalizedImageBuffer.length,
+                  'messaging',
+                  undefined,
+                  client.id
+                );
+                
+                await sendMMS(client.phone, personalizedMessage, personalizedImageUrl);
+                console.log(`[Messaging] Sent MMS with personalized image to ${client.phone}`);
               } catch (mmsError) {
                 console.error(`[Messaging] MMS failed, falling back to SMS:`, mmsError);
                 await smsService.sendSMS(client.phone, personalizedMessage);

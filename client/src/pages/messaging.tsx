@@ -74,6 +74,10 @@ export default function Messaging() {
   const [uploadedImage, setUploadedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [textX, setTextX] = useState(50);
+  const [textY, setTextY] = useState(50);
+  const [fontSize, setFontSize] = useState(48);
+  const [fontColor, setFontColor] = useState('#ffffff');
 
   const { data: clients = [] } = useQuery<Client[]>({
     queryKey: ['clients'],
@@ -168,6 +172,10 @@ export default function Messaging() {
       formData.append('followUpsEnabled', String(followUpsEnabled));
       if (imageEnabled && uploadedImage) {
         formData.append('image', uploadedImage);
+        formData.append('textX', String(textX));
+        formData.append('textY', String(textY));
+        formData.append('fontSize', String(fontSize));
+        formData.append('fontColor', fontColor);
       }
       
       const response = await fetch('/api/messaging/send', {
@@ -435,6 +443,19 @@ export default function Messaging() {
                         alt="Uploaded image"
                         className="w-full h-48 object-cover rounded-lg"
                       />
+                      <div 
+                        className="absolute font-bold pointer-events-none"
+                        style={{
+                          left: `${textX}%`,
+                          top: `${textY}%`,
+                          fontSize: `${Math.min(fontSize / 2, 24)}px`,
+                          color: fontColor,
+                          transform: 'translate(-50%, -50%)',
+                          textShadow: '2px 2px 4px rgba(0,0,0,0.7)'
+                        }}
+                      >
+                        Jan
+                      </div>
                       <button
                         onClick={removeImage}
                         className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
@@ -456,15 +477,75 @@ export default function Messaging() {
                   )}
                   
                   {imagePreview && (
-                    <Button 
-                      variant="outline"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-full border-emerald-600 text-emerald-600 hover:bg-emerald-50"
-                      data-testid="button-change-image"
-                    >
-                      <ImagePlus className="w-4 h-4 mr-2" />
-                      Zmień zdjęcie
-                    </Button>
+                    <div className="space-y-4 pt-4 border-t">
+                      <p className="text-sm font-medium text-gray-700">Pozycja imienia klienta</p>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-xs text-gray-500">Poziomo: {textX}%</Label>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={textX}
+                            onChange={(e) => setTextX(Number(e.target.value))}
+                            className="w-full accent-emerald-600"
+                            data-testid="slider-text-x"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-gray-500">Pionowo: {textY}%</Label>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={textY}
+                            onChange={(e) => setTextY(Number(e.target.value))}
+                            className="w-full accent-emerald-600"
+                            data-testid="slider-text-y"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-xs text-gray-500">Rozmiar: {fontSize}px</Label>
+                          <input
+                            type="range"
+                            min="24"
+                            max="120"
+                            value={fontSize}
+                            onChange={(e) => setFontSize(Number(e.target.value))}
+                            className="w-full accent-emerald-600"
+                            data-testid="slider-font-size"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-gray-500">Kolor tekstu</Label>
+                          <div className="flex gap-2 mt-1">
+                            {['#ffffff', '#000000', '#ffff00', '#00ff00'].map((color) => (
+                              <button
+                                key={color}
+                                onClick={() => setFontColor(color)}
+                                className={`w-8 h-8 rounded-full border-2 ${fontColor === color ? 'ring-2 ring-emerald-500 ring-offset-2' : 'border-gray-300'}`}
+                                style={{ backgroundColor: color }}
+                                data-testid={`button-color-${color.replace('#', '')}`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <Button 
+                        variant="outline"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full border-emerald-600 text-emerald-600 hover:bg-emerald-50"
+                        data-testid="button-change-image"
+                      >
+                        <ImagePlus className="w-4 h-4 mr-2" />
+                        Zmień zdjęcie
+                      </Button>
+                    </div>
                   )}
                 </div>
               )}
@@ -580,12 +661,25 @@ export default function Messaging() {
                       {/* Image Preview in MMS */}
                       {imageEnabled && imagePreview && (
                         <div className="mb-3">
-                          <div className="rounded-xl overflow-hidden shadow-sm">
+                          <div className="relative rounded-xl overflow-hidden shadow-sm">
                             <img 
                               src={imagePreview} 
                               alt="MMS attachment"
                               className="w-full h-32 object-cover"
                             />
+                            <div 
+                              className="absolute font-bold pointer-events-none"
+                              style={{
+                                left: `${textX}%`,
+                                top: `${textY}%`,
+                                fontSize: `${Math.min(fontSize / 3, 16)}px`,
+                                color: fontColor,
+                                transform: 'translate(-50%, -50%)',
+                                textShadow: '1px 1px 2px rgba(0,0,0,0.7)'
+                              }}
+                            >
+                              Jan
+                            </div>
                           </div>
                         </div>
                       )}
