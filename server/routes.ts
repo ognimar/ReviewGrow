@@ -15,7 +15,13 @@ import { sendPersonalizedEmail, sendBulkEmails, isEmailConfigured } from "./serv
 import { runEmailFollowUpNow } from "./services/emailFollowUpScheduler";
 import Stripe from "stripe";
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB max file size
+    fieldSize: 10 * 1024 * 1024, // 10MB max field size (for long URLs)
+  }
+});
 
 // Generate unique tracking slug (6 chars alphanumeric)
 function generateTrackingSlug(): string {
@@ -861,12 +867,12 @@ export async function registerRoutes(
                 
                 // Track the storage file
                 await trackStorageFile(
-                  req.user!.uid,
                   result.storagePath,
                   result.url,
-                  result.size,
+                  req.user!.uid,
                   'messaging',
-                  undefined,
+                  fileName,
+                  result.size,
                   client.id
                 );
                 
@@ -2426,11 +2432,12 @@ export async function registerRoutes(
         imageUrl = result.url;
         
         await trackStorageFile(
-          req.user!.uid,
           result.storagePath,
           result.url,
-          result.size,
-          'messaging-template'
+          req.user!.uid,
+          'messaging-template',
+          `campaign_template_${Date.now()}.jpg`,
+          result.size
         );
       }
 
