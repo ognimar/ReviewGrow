@@ -88,7 +88,7 @@ export async function sendMMS(
 
     const params = new URLSearchParams();
     params.append('to', cleanPhone);
-    params.append('subject', cleanMessage.slice(0, 40));
+    params.append('subject', cleanMessage.slice(0, 30));
     params.append('smil', smil);
     params.append('message', cleanMessage);
     params.append('format', 'json');
