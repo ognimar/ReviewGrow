@@ -822,6 +822,14 @@ export async function registerRoutes(
         fontColor: fontColor || '#ffffff'
       } : null;
 
+      // Check for saved messagingImage if no new upload
+      const savedMessagingImage = userData?.messagingImage;
+      const useSavedImage = !imageBuffer && savedMessagingImage?.enabled && savedMessagingImage?.imageUrl;
+      
+      if (useSavedImage) {
+        console.log(`[Messaging] Using saved messaging image: ${savedMessagingImage.imageUrl}`);
+      }
+
       for (const client of activeClients) {
         try {
           let trackingSlug = client.trackingSlug;
@@ -845,8 +853,8 @@ export async function registerRoutes(
           if (client.phone) {
             // Send MMS with personalized image or regular SMS
             if (imageBuffer && imageSettings) {
+              // New image uploaded - use it
               try {
-                // Generate personalized image with client's name
                 const clientFirstName = (client.name || 'Klient').split(' ')[0];
                 const personalizedImageBuffer = await personalizeImageFromBuffer(
                   imageBuffer,
@@ -860,12 +868,10 @@ export async function registerRoutes(
                   true // forMMS
                 );
                 
-                // Upload personalized image
                 const timestamp = Date.now();
                 const fileName = `${client.id}_${timestamp}.jpg`;
                 const result = await uploadToFirebaseStorage(personalizedImageBuffer, req.user!.uid, fileName);
                 
-                // Track the storage file
                 await trackStorageFile(
                   result.storagePath,
                   result.url,
@@ -876,10 +882,50 @@ export async function registerRoutes(
                   client.id
                 );
                 
+                // Send SMS first, then MMS with image
+                await sendSMS(client.phone, personalizedMessage);
                 await sendMMS(client.phone, personalizedMessage, result.url);
-                console.log(`[Messaging] Sent MMS with personalized image to ${client.phone}`);
+                console.log(`[Messaging] Sent SMS+MMS with personalized image to ${client.phone}`);
               } catch (mmsError) {
                 console.error(`[Messaging] MMS failed, falling back to SMS:`, mmsError);
+                await sendSMS(client.phone, personalizedMessage);
+              }
+            } else if (useSavedImage) {
+              // Use saved image from messagingImage settings
+              try {
+                const clientFirstName = (client.name || 'Klient').split(' ')[0];
+                const personalizedImageBuffer = await personalizeImageFromUrl(
+                  savedMessagingImage.imageUrl,
+                  clientFirstName,
+                  {
+                    x: savedMessagingImage.textX || 50,
+                    y: savedMessagingImage.textY || 50,
+                    fontSize: savedMessagingImage.fontSize || 48,
+                    fontColor: savedMessagingImage.fontColor || '#ffffff',
+                  },
+                  true // forMMS
+                );
+                
+                const timestamp = Date.now();
+                const fileName = `${client.id}_${timestamp}.jpg`;
+                const result = await uploadToFirebaseStorage(personalizedImageBuffer, req.user!.uid, fileName);
+                
+                await trackStorageFile(
+                  result.storagePath,
+                  result.url,
+                  req.user!.uid,
+                  'messaging',
+                  fileName,
+                  result.size,
+                  client.id
+                );
+                
+                // Send SMS first, then MMS with image
+                await sendSMS(client.phone, personalizedMessage);
+                await sendMMS(client.phone, personalizedMessage, result.url);
+                console.log(`[Messaging] Sent SMS+MMS with saved image to ${client.phone}`);
+              } catch (mmsError) {
+                console.error(`[Messaging] MMS with saved image failed, falling back to SMS:`, mmsError);
                 await sendSMS(client.phone, personalizedMessage);
               }
             } else {
