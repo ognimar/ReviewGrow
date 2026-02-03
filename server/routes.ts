@@ -844,8 +844,8 @@ export async function registerRoutes(
             await db.collection('clients').doc(client.id).update({ trackingSlug });
           }
 
-          const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-            ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
+          const baseUrl = process.env.REPLIT_DOMAINS?.split(',')[0] 
+            ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` 
             : 'https://reviewgrow.pl';
           const trackingLink = `${baseUrl}/r/${trackingSlug}`;
 
