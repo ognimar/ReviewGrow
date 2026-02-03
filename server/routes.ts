@@ -711,7 +711,7 @@ export async function registerRoutes(
   // Messaging - Send to all active clients directly
   app.post("/api/messaging/send", authenticate, upload.single('image'), async (req: AuthRequest, res) => {
     try {
-      const { message, followUpsEnabled, textX, textY, fontSize, fontColor } = req.body;
+      const { message, followUpsEnabled, textX, textY, fontSize, fontColor, emailEnabled, emailSubject, emailFrom } = req.body;
       const uploadedImage = req.file;
       
       if (!message) {
@@ -719,6 +719,7 @@ export async function registerRoutes(
       }
       
       const campaignFollowUpsEnabled = followUpsEnabled === 'true' || followUpsEnabled === true;
+      const sendEmails = emailEnabled === 'true' || emailEnabled === true;
       
       if (!message.includes('{{review_link}}')) {
         return res.status(400).json({ error: 'Message must include {{review_link}} tag' });
@@ -948,6 +949,42 @@ export async function registerRoutes(
             });
             
             sentCount++;
+          }
+          
+          // Also send email if enabled, client has email, and SendGrid is configured
+          if (sendEmails && client.email && isEmailConfigured()) {
+            try {
+              const fromEmailAddr = emailFrom || userData?.emailFollowUpSettings?.fromEmail || userData?.email;
+              if (!fromEmailAddr) {
+                console.log(`[Messaging] Skipping email for ${client.email} - no verified sender configured`);
+              } else {
+                const subject = emailSubject || 'Prosimy o opinię';
+                
+                const emailResult = await sendPersonalizedEmail(
+                  {
+                    email: client.email,
+                    name: client.name || 'Klient',
+                    trackingSlug: trackingSlug,
+                    clientId: client.id,
+                  },
+                  subject,
+                  personalizedMessage,
+                  fromEmailAddr,
+                  userData?.displayName || 'Review Grow',
+                  userData?.googleBusiness?.title
+                );
+                
+                if (emailResult.success) {
+                  await db.collection('clients').doc(client.id).update({
+                    lastEmailSentAt: now.toISOString(),
+                    emailStatus: 'SENT',
+                  });
+                  console.log(`[Messaging] Sent email to ${client.email}`);
+                }
+              }
+            } catch (emailError) {
+              console.error(`[Messaging] Email failed for ${client.email}:`, emailError);
+            }
           }
         } catch (error) {
           console.error(`Failed to send to ${client.phone}:`, error);

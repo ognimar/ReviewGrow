@@ -52,25 +52,34 @@ async function processUserEmailFollowUps(userId: string, userData: any): Promise
     return { sent: 0, failed: 0 };
   }
 
-  const settings: EmailFollowUpSettings = userData.emailFollowUpSettings;
-  if (!settings?.enabled || !settings.messages?.length) {
+  // Use same follow-up settings as SMS
+  const smsSettings = userData.followUpSettings;
+  const emailSettings = userData.emailFollowUpSettings;
+  
+  // Check if follow-ups are enabled (using SMS settings)
+  if (!smsSettings?.enabled) {
+    return { sent: 0, failed: 0 };
+  }
+  
+  // Get follow-up count from SMS settings
+  const followUpCount = smsSettings.followUpCount ?? smsSettings.messages?.filter((m: any) => m?.enabled)?.length ?? 2;
+  if (followUpCount <= 0) {
     return { sent: 0, failed: 0 };
   }
 
-  if (!settings.fromEmail) {
+  // Need email configuration for sender
+  const fromEmail = emailSettings?.fromEmail;
+  if (!fromEmail) {
     console.log(`[EmailFollowUp] Skipping user ${userId} - no fromEmail configured`);
     return { sent: 0, failed: 0 };
   }
-
-  const validMessages = settings.messages.filter(m => 
-    m && typeof m.enabled === 'boolean' && 
-    typeof m.daysAfter === 'number' && m.daysAfter > 0 &&
-    typeof m.message === 'string' && typeof m.subject === 'string'
-  );
-
-  if (validMessages.length === 0) {
-    return { sent: 0, failed: 0 };
-  }
+  
+  const fromName = emailSettings?.fromName || userData?.displayName || 'Review Grow';
+  const companyName = emailSettings?.companyName || userData?.googleBusiness?.title;
+  
+  // Default follow-up message template (same as SMS followUpScheduler.ts line 70)
+  const defaultFollowUpMessage = "Cześć {{name}}, chcieliśmy szybko sprawdzić. Bardzo docenimy Twoją opinię! {{google_link}}";
+  const defaultSubject = "Prosimy o opinię";
 
   const clientsSnapshot = await db.collection('clients')
     .where('ownerId', '==', userId)
@@ -89,85 +98,95 @@ async function processUserEmailFollowUps(userId: string, userData: any): Promise
     const client = clientDoc.data();
     const clientId = clientDoc.id;
 
+    // Skip clients without email or with opt-out/bounced status
     if (!client.email || client.emailStatus === 'OPT_OUT' || client.emailStatus === 'BOUNCED') {
       continue;
     }
-
-    const lastEmailSentAt = client.lastEmailSentAt 
-      ? new Date(client.lastEmailSentAt).getTime() 
-      : (client.lastSentAt ? new Date(client.lastSentAt).getTime() : 0);
     
-    if (!lastEmailSentAt) continue;
+    // Skip if follow-ups not enabled for this client
+    if (!client.followUpsEnabled) {
+      continue;
+    }
+
+    // Use lastSentAt as the trigger point (when initial campaign was sent)
+    const lastSentAt = client.lastSentAt ? new Date(client.lastSentAt).getTime() : 0;
+    if (!lastSentAt) continue;
 
     const emailFollowUpsSent = client.emailFollowUpsSent || 0;
     
+    // Check daily limit - don't send more than 1 follow-up per day
     const lastEmailFollowUpAt = client.lastEmailFollowUpAt ? new Date(client.lastEmailFollowUpAt).getTime() : 0;
     const oneDayMs = 24 * 60 * 60 * 1000;
     if (lastEmailFollowUpAt > 0 && (now - lastEmailFollowUpAt) < oneDayMs) {
       continue;
     }
+    
+    // Skip if already sent all follow-ups (use same count as SMS)
+    if (emailFollowUpsSent >= followUpCount) {
+      continue;
+    }
 
-    for (let i = emailFollowUpsSent; i < settings.messages.length; i++) {
-      const followUp = settings.messages[i];
-      if (!followUp.enabled || !followUp.message || !followUp.subject) continue;
-
-      const triggerDate = lastEmailSentAt + (followUp.daysAfter * 24 * 60 * 60 * 1000);
-      
-      if (now >= triggerDate) {
-        // Re-check credit limit before each send (atomic check)
-        const userRefresh = await db.collection('users').doc(userId).get();
-        const freshSub = userRefresh.data()?.subscription;
-        if (freshSub && (freshSub.requestsUsed || 0) >= (freshSub.requestLimit || 0)) {
-          console.log(`[EmailFollowUp] Stopping for ${userId} - credit limit reached during processing`);
-          break;
-        }
-
-        let trackingSlug = client.trackingSlug;
-        if (!trackingSlug) {
-          trackingSlug = generateTrackingSlug();
-          await clientDoc.ref.update({ trackingSlug });
-        }
-
-        console.log(`[EmailFollowUp] Sending email follow-up #${i + 1} to ${client.name} (${client.email})`);
-
-        const result = await sendPersonalizedEmail(
-          {
-            email: client.email,
-            name: client.name || 'Klient',
-            trackingSlug,
-            clientId,
-          },
-          followUp.subject,
-          followUp.message,
-          settings.fromEmail,
-          settings.fromName || 'Contact Review Grow',
-          settings.companyName
-        );
-
-        if (result.success) {
-          await clientDoc.ref.update({
-            emailFollowUpsSent: i + 1,
-            lastEmailFollowUpAt: new Date().toISOString(),
-            emailStatus: 'SENT',
-          });
-          
-          await db.collection('users').doc(userId).update({
-            'subscription.requestsUsed': FieldValue.increment(1),
-            emailUsed: FieldValue.increment(1),
-          });
-          
-          sent++;
-          console.log(`[EmailFollowUp] Successfully sent email follow-up #${i + 1} to ${client.name} (1 credit used)`);
-        } else {
-          failed++;
-          console.error(`[EmailFollowUp] Failed to send to ${client.name}: ${result.error}`);
-          
-          if (result.error?.includes('bounce') || result.error?.includes('invalid')) {
-            await clientDoc.ref.update({ emailStatus: 'BOUNCED' });
-          }
-        }
-
+    // Use same timing as SMS: (followUpNumber) * 3 days (matches line 130 in followUpScheduler.ts)
+    const nextFollowUpIndex = emailFollowUpsSent;
+    const daysAfter = (nextFollowUpIndex + 1) * 3;
+    const triggerDate = lastSentAt + (daysAfter * 24 * 60 * 60 * 1000);
+    
+    // Get message from settings.messages array (same as SMS) or use default
+    const followUp = smsSettings.messages?.[nextFollowUpIndex];
+    const followUpMessage = followUp?.message || defaultFollowUpMessage;
+    
+    if (now >= triggerDate) {
+      // Re-check credit limit before each send (atomic check)
+      const userRefresh = await db.collection('users').doc(userId).get();
+      const freshSub = userRefresh.data()?.subscription;
+      if (freshSub && (freshSub.requestsUsed || 0) >= (freshSub.requestLimit || 0)) {
+        console.log(`[EmailFollowUp] Stopping for ${userId} - credit limit reached during processing`);
         break;
+      }
+
+      let trackingSlug = client.trackingSlug;
+      if (!trackingSlug) {
+        trackingSlug = generateTrackingSlug();
+        await clientDoc.ref.update({ trackingSlug });
+      }
+
+      console.log(`[EmailFollowUp] Sending email follow-up #${nextFollowUpIndex + 1} to ${client.name} (${client.email}), ${daysAfter} days after campaign`);
+
+      const result = await sendPersonalizedEmail(
+        {
+          email: client.email,
+          name: client.name || 'Klient',
+          trackingSlug,
+          clientId,
+        },
+        defaultSubject,
+        followUpMessage,
+        fromEmail,
+        fromName,
+        companyName
+      );
+
+      if (result.success) {
+        await clientDoc.ref.update({
+          emailFollowUpsSent: nextFollowUpIndex + 1,
+          lastEmailFollowUpAt: new Date().toISOString(),
+          emailStatus: 'SENT',
+        });
+        
+        await db.collection('users').doc(userId).update({
+          'subscription.requestsUsed': FieldValue.increment(1),
+          emailUsed: FieldValue.increment(1),
+        });
+        
+        sent++;
+        console.log(`[EmailFollowUp] Successfully sent email follow-up #${nextFollowUpIndex + 1} to ${client.name} (1 credit used)`);
+      } else {
+        failed++;
+        console.error(`[EmailFollowUp] Failed to send to ${client.name}: ${result.error}`);
+        
+        if (result.error?.includes('bounce') || result.error?.includes('invalid')) {
+          await clientDoc.ref.update({ emailStatus: 'BOUNCED' });
+        }
       }
     }
   }
@@ -190,8 +209,9 @@ async function processAllUsersEmailFollowUps(): Promise<void> {
   }
 
   try {
+    // Query users with SMS follow-ups enabled (email uses same settings)
     const usersSnapshot = await db.collection('users')
-      .where('emailFollowUpSettings.enabled', '==', true)
+      .where('followUpSettings.enabled', '==', true)
       .get();
 
     console.log(`[EmailFollowUp] Found ${usersSnapshot.size} users with email follow-up enabled`);

@@ -79,6 +79,9 @@ export default function Messaging() {
   const [businessName, setBusinessName] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [imageEnabled, setImageEnabled] = useState(false);
+  const [emailEnabled, setEmailEnabled] = useState(false);
+  const [emailSubject, setEmailSubject] = useState("Prosimy o opinię");
+  const [emailFrom, setEmailFrom] = useState("");
   const [uploadedImage, setUploadedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -261,6 +264,11 @@ export default function Messaging() {
       const formData = new FormData();
       formData.append('message', getCurrentMessage());
       formData.append('followUpsEnabled', String(followUpsEnabled));
+      formData.append('emailEnabled', String(emailEnabled));
+      if (emailEnabled) {
+        formData.append('emailSubject', emailSubject);
+        formData.append('emailFrom', emailFrom);
+      }
       if (imageEnabled && uploadedImage) {
         formData.append('image', uploadedImage);
         formData.append('textX', String(textX));
@@ -735,6 +743,57 @@ export default function Messaging() {
                   <p className="text-sm text-emerald-700">
                     Będziemy wysyłać delikatne przypomnienia do klientów, którzy jeszcze nie zostawili opinii.
                   </p>
+                </div>
+              )}
+            </div>
+
+            {/* Email Section */}
+            <div className="bg-white rounded-xl border p-6" data-testid="panel-email">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                    <MessageSquare className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">E-mail {emailEnabled ? 'Włączony' : 'Wyłączony'}</h3>
+                    <p className="text-sm text-gray-500">Wyślij również e-mail do klientów z adresem</p>
+                  </div>
+                </div>
+                <Switch 
+                  checked={emailEnabled} 
+                  onCheckedChange={setEmailEnabled}
+                  className="data-[state=checked]:bg-blue-600"
+                  data-testid="switch-email"
+                />
+              </div>
+              
+              {emailEnabled && (
+                <div className="space-y-4 mt-4">
+                  <div>
+                    <Label htmlFor="emailSubject" className="text-sm font-medium text-gray-700">Temat e-maila</Label>
+                    <input
+                      id="emailSubject"
+                      type="text"
+                      value={emailSubject}
+                      onChange={(e) => setEmailSubject(e.target.value)}
+                      className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Prosimy o opinię"
+                      data-testid="input-email-subject"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="emailFrom" className="text-sm font-medium text-gray-700">Adres nadawcy</Label>
+                    <input
+                      id="emailFrom"
+                      type="email"
+                      value={emailFrom}
+                      onChange={(e) => setEmailFrom(e.target.value)}
+                      className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="kontakt@twojafirma.pl"
+                      data-testid="input-email-from"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Musi być zweryfikowany w SendGrid</p>
+                  </div>
                 </div>
               )}
             </div>
