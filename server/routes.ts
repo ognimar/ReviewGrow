@@ -832,6 +832,12 @@ export async function registerRoutes(
 
       for (const client of activeClients) {
         try {
+          // KILL-SWITCH: Skip if client already responded
+          if (client.status === 'RESPONDED') {
+            console.log(`[Messaging] Skipping ${client.name} - already RESPONDED`);
+            continue;
+          }
+          
           let trackingSlug = client.trackingSlug;
           if (!trackingSlug) {
             trackingSlug = generateTrackingSlug();
@@ -942,16 +948,20 @@ export async function registerRoutes(
               await sendSMS(client.phone, personalizedMessage);
             }
             
+            // Track which channels were used for this client
             await db.collection('clients').doc(client.id).update({
               status: 'SENT',
               lastSentAt: now.toISOString(),
               followUpsEnabled: campaignFollowUpsEnabled,
+              smsSent: true,
+              lastSmsSentAt: now.toISOString(),
             });
             
             sentCount++;
           }
           
-          // Also send email if enabled, client has email, and SendGrid is configured
+          // PARALLEL CHANNEL: Send email alongside SMS (same trackingSlug)
+          let emailSentSuccess = false;
           if (sendEmails && client.email && isEmailConfigured()) {
             try {
               const fromEmailAddr = 'feedback@reviewgrow.eu';
@@ -961,7 +971,7 @@ export async function registerRoutes(
                 {
                   email: client.email,
                   name: client.name || 'Klient',
-                  trackingSlug: trackingSlug,
+                  trackingSlug: trackingSlug, // Same tracking link as SMS
                   clientId: client.id,
                 },
                 subject,
@@ -972,11 +982,30 @@ export async function registerRoutes(
               );
               
               if (emailResult.success) {
-                await db.collection('clients').doc(client.id).update({
+                emailSentSuccess = true;
+                
+                // Update unified status if not already set by SMS
+                const clientUpdate: any = {
                   lastEmailSentAt: now.toISOString(),
+                  emailSent: true,
                   emailStatus: 'SENT',
+                };
+                
+                // If SMS wasn't sent (no phone), set unified status here
+                if (!client.phone) {
+                  clientUpdate.status = 'SENT';
+                  clientUpdate.lastSentAt = now.toISOString();
+                  clientUpdate.followUpsEnabled = campaignFollowUpsEnabled;
+                }
+                
+                await db.collection('clients').doc(client.id).update(clientUpdate);
+                console.log(`[Messaging] Sent email to ${client.email} (same tracking: ${trackingSlug})`);
+                
+                // Deduct credit for email send
+                await userRef.update({
+                  'subscription.requestsUsed': FieldValue.increment(1),
+                  emailUsed: FieldValue.increment(1),
                 });
-                console.log(`[Messaging] Sent email to ${client.email}`);
               }
             } catch (emailError) {
               console.error(`[Messaging] Email failed for ${client.email}:`, emailError);

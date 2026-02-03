@@ -1,0 +1,43 @@
+Cel: Przebuduj logikę kampanii, aby SMS-y i E-maile były wysyłane równolegle do tego samego klienta, dopóki nie zmieni on statusu na RESPONDED.
+
+1. Zunifikowany Model Statusów (The Source of Truth): Zastosuj jedną flagę stanu dla kontaktu w danej kampanii:
+
+    NEW: Brak kontaktu.
+
+    ACTIVE_SEQUENCE: System wysyła zaplanowane wiadomości (SMS + Email).
+
+    CLICKED: Klient wszedł w link (dowolny: z maila lub SMS).
+
+    RESPONDED: TERMINAL STATE. Klient wystawił opinię. Ten status natychmiastowo i bezpowrotnie zatrzymuje wszystkie zaplanowane akcje (SMS i Email).
+
+2. Mechanika Wielokanałowej Wysyłki (Parallel Flow): Zmień logikę wysyłki na „Kolejkę Zdarzeń” (Event Queue):
+
+    Po uruchomieniu kampanii, dodaj do kolejki dwa zadania: send_initial_sms i send_initial_email.
+
+    Zasada „Kill-Switch”: Przed każdą wysyłką (zarówno pierwszą, jak i follow-upem), worker musi sprawdzić: if (contact.status === 'RESPONDED') { abort_all_tasks_for_this_contact(); }
+
+    Dzięki temu, jeśli klient kliknie w link z maila i wystawi ocenę (24. sekunda filmu), zaplanowany na jutro SMS automatycznie „wylatuje” z kolejki.
+
+3. Identyczny Link Trackingowy (Unified Slug):
+
+    Każdy kontakt otrzymuje jeden unikalny trackingToken.
+
+    Ten sam link feedback.reviewharvest.pl/u/{{token}} musi być wstrzyknięty zarówno do szablonu SMS, jak i E-maila.
+
+    Niezależnie od źródła kliknięcia, użytkownik trafia na tę samą stronę pośrednią (Review Gate), która zarządza tym samym rekordem w bazie danych.
+
+4. Logika Kredytowa (Multi-Channel Billing):
+
+    System musi odliczać kredyty za każdy kanał oddzielnie:
+
+        Udany SMS = -1 kredyt.
+
+        Udany Email = -1 kredyt (lub zgodnie z Twoim cennikiem).
+
+    Jeśli w połowie sekwencji (np. po 1. SMS i 1. Emailu) klient wystawi opinię, system przestaje wysyłać kolejne follow-upy, tym samym oszczędzając pozostałe kredyty użytkownika.
+
+5. Dashboard – Widok Omnichannel:
+
+    W tabeli kampanii nie rozdzielaj statusów na maile i SMS. Pokaż jedną kolumnę „Status Klienta” (np. „W trakcie sekwencji”, „Wystawił opinię”).
+
+    Dodaj ikonki (koperta / telefon) obok nazwiska klienta, wskazujące, które kanały zostały już użyte.

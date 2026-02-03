@@ -2,7 +2,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Upload, FileDown, Search, Loader2, Users, Pencil, Trash2, Heart, MessageCircle, Star, UserPlus } from "lucide-react";
+import { Upload, FileDown, Search, Loader2, Users, Pencil, Trash2, Heart, MessageCircle, Star, UserPlus, Smartphone, Mail } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -22,6 +22,8 @@ interface Client {
   status?: 'NEW' | 'SENT' | 'CLICKED' | 'PENDING_REVIEW' | 'RESPONDED';
   createdAt: string;
   lastSentAt?: string;
+  smsSent?: boolean;
+  emailSent?: boolean;
   savedCustomer?: boolean;
   lastComplaint?: {
     rating: number;
@@ -392,7 +394,39 @@ export default function Clients() {
                 <TableBody>
                   {filteredClients.map((client) => (
                     <TableRow key={client.id} data-testid={`row-client-${client.id}`}>
-                      <TableCell className="font-medium">{client.name}</TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          <span>{client.name}</span>
+                          {(client.smsSent || client.emailSent) && (
+                            <div className="flex items-center gap-1">
+                              {client.smsSent && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Smartphone className="h-3.5 w-3.5 text-emerald-500" data-testid={`icon-sms-${client.id}`} />
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>SMS wysłany</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+                              {client.emailSent && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Mail className="h-3.5 w-3.5 text-blue-500" data-testid={`icon-email-${client.id}`} />
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Email wysłany</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>{client.phone || '-'}</TableCell>
                       <TableCell>{client.email || '-'}</TableCell>
                       <TableCell>

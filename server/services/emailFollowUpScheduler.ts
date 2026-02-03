@@ -98,6 +98,12 @@ async function processUserEmailFollowUps(userId: string, userData: any): Promise
       continue;
     }
     
+    // KILL-SWITCH: Skip if client already responded
+    if (client.status === 'RESPONDED') {
+      console.log(`[EmailFollowUp] Skipping ${client.name} - already RESPONDED (kill-switch)`);
+      continue;
+    }
+    
     // Skip if follow-ups not enabled for this client
     if (!client.followUpsEnabled) {
       continue;

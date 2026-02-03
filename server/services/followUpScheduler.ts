@@ -107,6 +107,12 @@ async function processUserFollowUps(userId: string, userData: any, baseUrl: stri
 
     if (!client.lastSentAt || !client.phone) continue;
     
+    // KILL-SWITCH: Skip if client already responded
+    if (client.status === 'RESPONDED') {
+      console.log(`[FollowUp] Skipping ${client.name} - already RESPONDED (kill-switch)`);
+      continue;
+    }
+    
     // Check if follow-ups are enabled for this specific client (per-campaign setting)
     if (client.followUpsEnabled === false) {
       console.log(`[FollowUp] Skipping ${client.name} - follow-ups disabled for this client`);
