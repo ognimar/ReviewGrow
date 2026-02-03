@@ -67,13 +67,8 @@ async function processUserEmailFollowUps(userId: string, userData: any): Promise
     return { sent: 0, failed: 0 };
   }
 
-  // Need email configuration for sender
-  const fromEmail = emailSettings?.fromEmail;
-  if (!fromEmail) {
-    console.log(`[EmailFollowUp] Skipping user ${userId} - no fromEmail configured`);
-    return { sent: 0, failed: 0 };
-  }
-  
+  // Use default sender address
+  const fromEmail = 'feedback@reviewgrow.eu';
   const fromName = emailSettings?.fromName || userData?.displayName || 'Review Grow';
   const companyName = emailSettings?.companyName || userData?.googleBusiness?.title;
   

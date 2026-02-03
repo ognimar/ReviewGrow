@@ -80,8 +80,6 @@ export default function Messaging() {
   const [isSending, setIsSending] = useState(false);
   const [imageEnabled, setImageEnabled] = useState(false);
   const [emailEnabled, setEmailEnabled] = useState(false);
-  const [emailSubject, setEmailSubject] = useState("Prosimy o opinię");
-  const [emailFrom, setEmailFrom] = useState("");
   const [uploadedImage, setUploadedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -265,10 +263,6 @@ export default function Messaging() {
       formData.append('message', getCurrentMessage());
       formData.append('followUpsEnabled', String(followUpsEnabled));
       formData.append('emailEnabled', String(emailEnabled));
-      if (emailEnabled) {
-        formData.append('emailSubject', emailSubject);
-        formData.append('emailFrom', emailFrom);
-      }
       if (imageEnabled && uploadedImage) {
         formData.append('image', uploadedImage);
         formData.append('textX', String(textX));
@@ -767,36 +761,7 @@ export default function Messaging() {
                 />
               </div>
               
-              {emailEnabled && (
-                <div className="space-y-4 mt-4">
-                  <div>
-                    <Label htmlFor="emailSubject" className="text-sm font-medium text-gray-700">Temat e-maila</Label>
-                    <input
-                      id="emailSubject"
-                      type="text"
-                      value={emailSubject}
-                      onChange={(e) => setEmailSubject(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Prosimy o opinię"
-                      data-testid="input-email-subject"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="emailFrom" className="text-sm font-medium text-gray-700">Adres nadawcy</Label>
-                    <input
-                      id="emailFrom"
-                      type="email"
-                      value={emailFrom}
-                      onChange={(e) => setEmailFrom(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="kontakt@twojafirma.pl"
-                      data-testid="input-email-from"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Musi być zweryfikowany w SendGrid</p>
-                  </div>
-                </div>
-              )}
-            </div>
+                          </div>
           </div>
 
           {/* Right Column - Phone Preview (40%) */}

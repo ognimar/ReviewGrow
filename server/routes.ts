@@ -954,33 +954,29 @@ export async function registerRoutes(
           // Also send email if enabled, client has email, and SendGrid is configured
           if (sendEmails && client.email && isEmailConfigured()) {
             try {
-              const fromEmailAddr = emailFrom || userData?.emailFollowUpSettings?.fromEmail || userData?.email;
-              if (!fromEmailAddr) {
-                console.log(`[Messaging] Skipping email for ${client.email} - no verified sender configured`);
-              } else {
-                const subject = emailSubject || 'Prosimy o opinię';
-                
-                const emailResult = await sendPersonalizedEmail(
-                  {
-                    email: client.email,
-                    name: client.name || 'Klient',
-                    trackingSlug: trackingSlug,
-                    clientId: client.id,
-                  },
-                  subject,
-                  personalizedMessage,
-                  fromEmailAddr,
-                  userData?.displayName || 'Review Grow',
-                  userData?.googleBusiness?.title
-                );
-                
-                if (emailResult.success) {
-                  await db.collection('clients').doc(client.id).update({
-                    lastEmailSentAt: now.toISOString(),
-                    emailStatus: 'SENT',
-                  });
-                  console.log(`[Messaging] Sent email to ${client.email}`);
-                }
+              const fromEmailAddr = 'feedback@reviewgrow.eu';
+              const subject = 'Prosimy o opinię';
+              
+              const emailResult = await sendPersonalizedEmail(
+                {
+                  email: client.email,
+                  name: client.name || 'Klient',
+                  trackingSlug: trackingSlug,
+                  clientId: client.id,
+                },
+                subject,
+                personalizedMessage,
+                fromEmailAddr,
+                userData?.displayName || 'Review Grow',
+                userData?.googleBusiness?.title
+              );
+              
+              if (emailResult.success) {
+                await db.collection('clients').doc(client.id).update({
+                  lastEmailSentAt: now.toISOString(),
+                  emailStatus: 'SENT',
+                });
+                console.log(`[Messaging] Sent email to ${client.email}`);
               }
             } catch (emailError) {
               console.error(`[Messaging] Email failed for ${client.email}:`, emailError);
