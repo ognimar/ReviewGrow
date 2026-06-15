@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2, Link2, Unlink, MapPin, Star, ExternalLink, Building2, Bot, Sparkles, Play, MessageSquare, Clock, Send, Mail, HardDrive, Trash2, Image, FileText, AlertTriangle } from "lucide-react";
+import { Loader2, Link2, Unlink, MapPin, Star, ExternalLink, Building2, Bot, Sparkles, Play, MessageSquare, Clock, HardDrive, Trash2, Image, FileText, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,21 +31,6 @@ interface FollowUpSettings {
   enabled: boolean;
   messages: FollowUpMessage[];
   templateId?: string | null;
-}
-
-interface EmailFollowUpMessage {
-  enabled: boolean;
-  daysAfter: number;
-  subject: string;
-  message: string;
-}
-
-interface EmailFollowUpSettings {
-  enabled: boolean;
-  messages: EmailFollowUpMessage[];
-  fromEmail: string;
-  fromName: string;
-  companyName: string;
 }
 
 interface StorageFile {
@@ -120,15 +105,6 @@ export default function Settings() {
   const [followUpTemplateId, setFollowUpTemplateId] = useState<string | null>(null);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>("");
   
-  const [emailFollowUpEnabled, setEmailFollowUpEnabled] = useState(false);
-  const [emailFollowUpMessages, setEmailFollowUpMessages] = useState<EmailFollowUpMessage[]>([
-    { enabled: true, daysAfter: 3, subject: 'Przypomnienie: Prosimy o opinię', message: '' },
-    { enabled: true, daysAfter: 7, subject: 'Ostatnie przypomnienie', message: '' },
-  ]);
-  const [emailFromEmail, setEmailFromEmail] = useState('');
-  const [emailFromName, setEmailFromName] = useState('');
-  const [emailCompanyName, setEmailCompanyName] = useState('');
-
   const { data: campaigns } = useQuery<Campaign[]>({
     queryKey: ['campaigns'],
     queryFn: async () => {
@@ -310,74 +286,6 @@ export default function Settings() {
       setFollowUpTemplateId(followUpSettings.templateId || null);
     }
   }, [followUpSettings]);
-
-  const { data: emailFollowUpSettings, isLoading: emailFollowUpLoading } = useQuery<EmailFollowUpSettings>({
-    queryKey: ['email-follow-up-settings'],
-    queryFn: async () => {
-      const response = await fetch('/api/email-follow-up/settings', {
-        headers: { 'Authorization': `Bearer ${await user?.getIdToken()}` },
-      });
-      if (!response.ok) throw new Error('Failed to fetch settings');
-      return response.json();
-    },
-  });
-
-  useEffect(() => {
-    if (emailFollowUpSettings) {
-      setEmailFollowUpEnabled(emailFollowUpSettings.enabled);
-      if (emailFollowUpSettings.messages?.length) {
-        setEmailFollowUpMessages(emailFollowUpSettings.messages);
-      }
-      setEmailFromEmail(emailFollowUpSettings.fromEmail || '');
-      setEmailFromName(emailFollowUpSettings.fromName || '');
-      setEmailCompanyName(emailFollowUpSettings.companyName || '');
-    }
-  }, [emailFollowUpSettings]);
-
-  const saveEmailFollowUpMutation = useMutation({
-    mutationFn: async (settings: EmailFollowUpSettings) => {
-      const response = await fetch('/api/email-follow-up/settings', {
-        method: 'PUT',
-        headers: { 
-          'Authorization': `Bearer ${await user?.getIdToken()}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(settings),
-      });
-      if (!response.ok) throw new Error('Failed to save settings');
-      return response.json();
-    },
-    onSuccess: () => {
-      toast({ title: 'Ustawienia email follow-up zapisane!' });
-      queryClient.invalidateQueries({ queryKey: ['email-follow-up-settings'] });
-    },
-    onError: () => {
-      toast({ title: 'Nie udało się zapisać ustawień', variant: 'destructive' });
-    },
-  });
-
-  const processEmailFollowUpMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch('/api/email-follow-up/process', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${await user?.getIdToken()}` },
-      });
-      if (!response.ok) throw new Error('Failed to process');
-      return response.json();
-    },
-    onSuccess: () => {
-      toast({ title: 'Przetwarzanie email follow-up uruchomione!' });
-    },
-    onError: () => {
-      toast({ title: 'Nie udało się uruchomić przetwarzania', variant: 'destructive' });
-    },
-  });
-
-  const updateEmailFollowUpMessage = (index: number, field: keyof EmailFollowUpMessage, value: any) => {
-    const updated = [...emailFollowUpMessages];
-    updated[index] = { ...updated[index], [field]: value };
-    setEmailFollowUpMessages(updated);
-  };
 
   // Storage Management
   const { data: storageData, isLoading: storageLoading, refetch: refetchStorage } = useQuery<{ files: StorageFile[], totalSize: number, totalCount: number }>({
@@ -900,188 +808,6 @@ export default function Settings() {
             </CardContent>
           </Card>
         )}
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Mail className="h-5 w-5 text-primary" />
-              Automatyczne Follow-up Email
-            </CardTitle>
-            <CardDescription>
-              Automatycznie wysyłaj e-maile przypominające do klientów, którzy nie zostawili jeszcze opinii.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {emailFollowUpLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="email-follow-up-toggle">Włącz automatyczne email follow-up</Label>
-                    <p className="text-sm text-muted-foreground">
-                      System automatycznie wyśle e-maile przypominające
-                    </p>
-                  </div>
-                  <Switch
-                    id="email-follow-up-toggle"
-                    checked={emailFollowUpEnabled}
-                    onCheckedChange={setEmailFollowUpEnabled}
-                    data-testid="switch-email-follow-up"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email-from">Adres e-mail nadawcy</Label>
-                    <Input
-                      id="email-from"
-                      type="email"
-                      placeholder="twoja@firma.pl"
-                      value={emailFromEmail}
-                      onChange={(e) => setEmailFromEmail(e.target.value)}
-                      data-testid="input-email-from"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email-from-name">Nazwa nadawcy</Label>
-                    <Input
-                      id="email-from-name"
-                      placeholder="Nazwa Twojej Firmy"
-                      value={emailFromName}
-                      onChange={(e) => setEmailFromName(e.target.value)}
-                      data-testid="input-email-from-name"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email-company">Nazwa firmy (opcjonalnie)</Label>
-                    <Input
-                      id="email-company"
-                      placeholder="Firma Sp. z o.o."
-                      value={emailCompanyName}
-                      onChange={(e) => setEmailCompanyName(e.target.value)}
-                      data-testid="input-email-company"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <Label>Konfiguracja sekwencji e-mail</Label>
-                  
-                  {emailFollowUpMessages.map((msg, index) => (
-                    <div key={index} className="border rounded-lg p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Badge variant={msg.enabled ? "default" : "secondary"}>
-                            Email #{index + 1}
-                          </Badge>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Clock className="h-4 w-4" />
-                            <span>po</span>
-                            <Input
-                              type="number"
-                              min={1}
-                              max={30}
-                              value={msg.daysAfter}
-                              onChange={(e) => updateEmailFollowUpMessage(index, 'daysAfter', parseInt(e.target.value) || 1)}
-                              className="w-16 h-8"
-                              data-testid={`input-email-days-${index}`}
-                            />
-                            <span>dniach</span>
-                          </div>
-                        </div>
-                        <Switch
-                          checked={msg.enabled}
-                          onCheckedChange={(checked) => updateEmailFollowUpMessage(index, 'enabled', checked)}
-                          data-testid={`switch-email-followup-${index}`}
-                        />
-                      </div>
-                      
-                      <Input
-                        placeholder="Temat e-maila..."
-                        value={msg.subject}
-                        onChange={(e) => updateEmailFollowUpMessage(index, 'subject', e.target.value)}
-                        disabled={!msg.enabled}
-                        className={!msg.enabled ? 'opacity-50' : ''}
-                        data-testid={`input-email-subject-${index}`}
-                      />
-                      
-                      <Textarea
-                        placeholder={`Treść e-maila #${index + 1}... Użyj {{name}} i {{google_link}}`}
-                        value={msg.message}
-                        onChange={(e) => updateEmailFollowUpMessage(index, 'message', e.target.value)}
-                        rows={3}
-                        disabled={!msg.enabled}
-                        className={!msg.enabled ? 'opacity-50' : ''}
-                        data-testid={`textarea-email-followup-${index}`}
-                      />
-                    </div>
-                  ))}
-                  
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setEmailFollowUpMessages([
-                      ...emailFollowUpMessages,
-                      { enabled: false, daysAfter: (emailFollowUpMessages.length + 1) * 3, subject: '', message: '' }
-                    ])}
-                    data-testid="button-add-email-followup"
-                  >
-                    + Dodaj kolejny e-mail
-                  </Button>
-                </div>
-
-                <div className="flex gap-3">
-                  <Button
-                    onClick={() => saveEmailFollowUpMutation.mutate({
-                      enabled: emailFollowUpEnabled,
-                      messages: emailFollowUpMessages,
-                      fromEmail: emailFromEmail,
-                      fromName: emailFromName,
-                      companyName: emailCompanyName,
-                    })}
-                    disabled={saveEmailFollowUpMutation.isPending}
-                    data-testid="button-save-email-follow-up"
-                  >
-                    {saveEmailFollowUpMutation.isPending ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : null}
-                    Zapisz Ustawienia
-                  </Button>
-
-                  {emailFollowUpEnabled && (
-                    <Button
-                      variant="outline"
-                      onClick={() => processEmailFollowUpMutation.mutate()}
-                      disabled={processEmailFollowUpMutation.isPending}
-                      data-testid="button-process-email-follow-ups"
-                    >
-                      {processEmailFollowUpMutation.isPending ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Send className="mr-2 h-4 w-4" />
-                      )}
-                      Wyślij Teraz
-                    </Button>
-                  )}
-                </div>
-
-                <div className="bg-muted/50 rounded-lg p-4 text-sm">
-                  <p className="font-medium mb-2">Jak to działa:</p>
-                  <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                    <li>E-maile wysyłane są do klientów ze statusem SENT lub CLICKED</li>
-                    <li>Klienci którzy odpowiedzieli lub wypisali się są pomijani</li>
-                    <li>Użyj {"{{name}}"}, {"{{first_name}}"} i {"{{google_link}}"} w treści</li>
-                    <li>System automatycznie śledzi otwarcia i kliknięcia</li>
-                    <li>Każdy e-mail kosztuje 1 kredyt</li>
-                  </ul>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
 
         {/* Storage Management */}
         <Card>
