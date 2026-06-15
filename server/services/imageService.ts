@@ -168,6 +168,42 @@ export async function deleteStorageFileById(fileId: string, ownerId: string): Pr
   return true;
 }
 
+export async function getAllStorageFiles(): Promise<(StorageFileRecord & { id: string })[]> {
+  const db = getFirestore();
+  if (!db) return [];
+
+  const snapshot = await db.collection('storageFiles')
+    .orderBy('createdAt', 'desc')
+    .get();
+
+  return snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data() as StorageFileRecord,
+  }));
+}
+
+export async function adminDeleteStorageFileById(fileId: string): Promise<boolean> {
+  const db = getFirestore();
+  const storage = getStorage();
+  if (!storage) return false;
+
+  const doc = await db.collection('storageFiles').doc(fileId).get();
+  if (!doc.exists) return false;
+
+  const data = doc.data() as StorageFileRecord;
+  try {
+    const bucket = storage.bucket();
+    await bucket.file(data.storagePath).delete();
+  } catch (error: any) {
+    if (error.code !== 404) {
+      console.error(`Failed to delete storage file:`, error);
+    }
+  }
+
+  await doc.ref.delete();
+  return true;
+}
+
 async function fetchImageBuffer(url: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const protocol = url.startsWith('https') ? https : http;

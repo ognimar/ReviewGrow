@@ -1,10 +1,10 @@
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Loader2, ShieldAlert, MoreHorizontal, Ban, UserCheck } from "lucide-react";
+import { Loader2, ShieldAlert, MoreHorizontal, Ban, UserCheck, HardDrive, Trash2, Image, FileText, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchAdminUsers } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -29,6 +29,227 @@ interface AdminUser {
   createdAt: string;
   lastLogin: string;
   banned?: boolean;
+}
+
+interface StorageFile {
+  id: string;
+  storagePath: string;
+  url: string;
+  ownerId: string;
+  type: 'campaign' | 'followup' | 'email_followup' | 'template';
+  relatedEntityId?: string;
+  fileName: string;
+  size: number;
+  createdAt: string;
+}
+
+interface StorageData {
+  files: StorageFile[];
+  totalSize: number;
+  totalCount: number;
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function fileTypeLabel(type: StorageFile['type']) {
+  switch (type) {
+    case 'campaign': return 'Kampania';
+    case 'followup': return 'Follow-up SMS';
+    case 'email_followup': return 'Follow-up Email';
+    case 'template': return 'Szablon';
+    default: return type;
+  }
+}
+
+function StorageSection({ users }: { users: AdminUser[] }) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
+
+  const { data: storageData, isLoading } = useQuery<StorageData>({
+    queryKey: ['admin-storage'],
+    queryFn: async () => {
+      const res = await fetch('/api/admin/storage', {
+        headers: { 'Authorization': `Bearer ${await user?.getIdToken()}` },
+      });
+      if (!res.ok) throw new Error('Failed to fetch storage');
+      return res.json();
+    },
+  });
+
+  const deleteFileMutation = useMutation({
+    mutationFn: async (fileId: string) => {
+      const res = await fetch(`/api/admin/storage/${fileId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${await user?.getIdToken()}` },
+      });
+      if (!res.ok) throw new Error('Failed to delete file');
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Plik usunięty' });
+      queryClient.invalidateQueries({ queryKey: ['admin-storage'] });
+    },
+    onError: () => {
+      toast({ title: 'Nie udało się usunąć pliku', variant: 'destructive' });
+    },
+  });
+
+  const deleteUserFilesMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await fetch(`/api/admin/storage/user/${userId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${await user?.getIdToken()}` },
+      });
+      if (!res.ok) throw new Error('Failed to delete user files');
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: `Usunięto ${data.deletedCount} plików` });
+      queryClient.invalidateQueries({ queryKey: ['admin-storage'] });
+    },
+    onError: () => {
+      toast({ title: 'Nie udało się usunąć plików', variant: 'destructive' });
+    },
+  });
+
+  const toggleUser = (userId: string) => {
+    setExpandedUsers(prev => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const files = storageData?.files || [];
+
+  // Group files by user
+  const byUser = files.reduce<Record<string, StorageFile[]>>((acc, f) => {
+    if (!acc[f.ownerId]) acc[f.ownerId] = [];
+    acc[f.ownerId].push(f);
+    return acc;
+  }, {});
+
+  const userIds = Object.keys(byUser);
+
+  const getUserLabel = (userId: string) => {
+    const u = users.find(u => u.id === userId);
+    return u ? `${u.displayName || u.email} (${u.email})` : userId;
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-4 p-4 bg-muted/50 rounded-lg">
+        <div>
+          <p className="text-lg font-semibold">{storageData?.totalCount || 0} plików</p>
+          <p className="text-sm text-muted-foreground">Łącznie: {formatFileSize(storageData?.totalSize || 0)}</p>
+        </div>
+        <div className="text-sm text-muted-foreground">{userIds.length} użytkowników z plikami</div>
+      </div>
+
+      {userIds.length === 0 ? (
+        <div className="text-center py-10 text-muted-foreground">
+          <HardDrive className="h-12 w-12 mx-auto mb-3 opacity-40" />
+          <p>Brak plików w storage</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {userIds.map(userId => {
+            const userFiles = byUser[userId];
+            const userSize = userFiles.reduce((s, f) => s + (f.size || 0), 0);
+            const isExpanded = expandedUsers.has(userId);
+            return (
+              <div key={userId} className="border rounded-lg overflow-hidden" data-testid={`storage-user-${userId}`}>
+                <div
+                  className="flex items-center justify-between p-3 bg-muted/30 cursor-pointer hover:bg-muted/50"
+                  onClick={() => toggleUser(userId)}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    {isExpanded
+                      ? <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      : <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    }
+                    <span className="text-sm font-medium truncate">{getUserLabel(userId)}</span>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <Badge variant="secondary">{userFiles.length} plików · {formatFileSize(userSize)}</Badge>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Usunąć wszystkie pliki użytkownika? (${userFiles.length} plików)`)) {
+                          deleteUserFilesMutation.mutate(userId);
+                        }
+                      }}
+                      disabled={deleteUserFilesMutation.isPending}
+                      data-testid={`button-delete-user-storage-${userId}`}
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Usuń wszystkie
+                    </Button>
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <div className="divide-y">
+                    {userFiles.map(file => (
+                      <div key={file.id} className="flex items-center justify-between px-4 py-2 hover:bg-muted/20">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          {/\.(jpg|jpeg|png|gif|webp)$/i.test(file.fileName)
+                            ? <Image className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                            : <FileText className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                          }
+                          <div className="min-w-0">
+                            <p className="text-sm truncate" title={file.fileName}>{file.fileName}</p>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Badge variant="outline" className="text-xs py-0">{fileTypeLabel(file.type)}</Badge>
+                              <span>{formatFileSize(file.size)}</span>
+                              <span>{new Date(file.createdAt).toLocaleDateString('pl-PL')}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => deleteFileMutation.mutate(file.id)}
+                          disabled={deleteFileMutation.isPending}
+                          data-testid={`button-delete-file-${file.id}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-500" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-950 rounded-lg flex items-start gap-3">
+        <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+        <p className="text-sm text-amber-700 dark:text-amber-300">
+          Pliki wygenerowane przed wdrożeniem systemu śledzenia nie są tutaj widoczne. Możesz je usunąć bezpośrednio w konsoli Firebase Storage.
+        </p>
+      </div>
+    </>
+  );
 }
 
 export default function AdminUsers() {
@@ -228,6 +449,21 @@ export default function AdminUsers() {
                 </TableBody>
               </Table>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <HardDrive className="h-5 w-5" />
+              Zarządzanie Storage
+            </CardTitle>
+            <CardDescription>
+              Pliki Firebase Storage wszystkich użytkowników — obrazy kampanii, follow-upów i szablonów.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <StorageSection users={users} />
           </CardContent>
         </Card>
       </div>

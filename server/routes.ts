@@ -10,7 +10,7 @@ import { generatePersonalizedImages } from "./services/imageService";
 import { sendSMS, sendMMS } from "./services/smsService";
 import { generateAuthUrl, exchangeCodeForTokens, getAccounts, getLocations, getReviews, generateReviewLink, refreshAccessToken, replyToReview } from "./services/googleBusinessService";
 import { generateAIReply } from "./services/aiReplyService";
-import { personalizeImageFromUrl, personalizeImageFromBuffer, uploadToFirebaseStorage, deleteFromFirebaseStorage, extractStoragePathFromUrl, trackStorageFile, getStorageFilesByOwner, deleteStorageFileById, deleteStorageFilesByOwner } from "./services/imageService";
+import { personalizeImageFromUrl, personalizeImageFromBuffer, uploadToFirebaseStorage, deleteFromFirebaseStorage, extractStoragePathFromUrl, trackStorageFile, getStorageFilesByOwner, deleteStorageFileById, deleteStorageFilesByOwner, getAllStorageFiles, adminDeleteStorageFileById } from "./services/imageService";
 import { sendPersonalizedEmail, sendBulkEmails, isEmailConfigured } from "./services/emailService";
 import { runEmailFollowUpNow } from "./services/emailFollowUpScheduler";
 import Stripe from "stripe";
@@ -2923,6 +2923,42 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Unsubscribe error:', error);
       res.status(500).send('Wystąpił błąd');
+    }
+  });
+
+  // Admin: Storage Management
+  app.get("/api/admin/storage", authenticate, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const files = await getAllStorageFiles();
+      const totalSize = files.reduce((sum, f) => sum + (f.size || 0), 0);
+      res.json({ files, totalSize, totalCount: files.length });
+    } catch (error) {
+      console.error('Admin get storage files error:', error);
+      res.status(500).json({ error: 'Failed to get storage files' });
+    }
+  });
+
+  app.delete("/api/admin/storage/:fileId", authenticate, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const success = await adminDeleteStorageFileById(req.params.fileId);
+      if (success) {
+        res.json({ success: true });
+      } else {
+        res.status(404).json({ error: 'File not found' });
+      }
+    } catch (error) {
+      console.error('Admin delete storage file error:', error);
+      res.status(500).json({ error: 'Failed to delete file' });
+    }
+  });
+
+  app.delete("/api/admin/storage/user/:userId", authenticate, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const deleted = await deleteStorageFilesByOwner(req.params.userId);
+      res.json({ success: true, deletedCount: deleted });
+    } catch (error) {
+      console.error('Admin delete user storage error:', error);
+      res.status(500).json({ error: 'Failed to delete files' });
     }
   });
 
